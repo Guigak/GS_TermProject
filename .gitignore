@@ -1,2 +1,10 @@
 /Server/TermP_Server/.vs
+/Server/TermP_Server/Debug
+/Server/TermP_Server/Release
 /Server/TermP_Server/x64
+
+/Client/TermP_Client/.vs
+/Client/TermP_Client/packages
+/Client/TermP_Client/Debug
+/Client/TermP_Client/Release
+/Client/TermP_Client/x64
