@@ -176,6 +176,7 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		short x = m_objects[client_id].m_x;
 		short y = m_objects[client_id].m_y;
 
+		// move
 		switch (p->direction) {
 		case 0:
 			if (y > 0) {
@@ -202,9 +203,10 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		m_objects[client_id].m_x = x;
 		m_objects[client_id].m_y = y;
 
-		std::unordered_set<int> near_list;
+		// view list
+		std::unordered_set<int> new_view_list;
 		m_objects[client_id].m_vl_lock.lock();
-		std::unordered_set<int> old_vlist = m_objects[client_id].m_view_list;
+		std::unordered_set<int> old_view_list = m_objects[client_id].m_view_list;
 		m_objects[client_id].m_vl_lock.unlock();
 
 		for (auto& cl : m_objects) {
@@ -217,39 +219,29 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 			}
 
 			if (m_objects[client_id].can_see(cl)) {
-				near_list.insert(cl.m_id);
+				new_view_list.insert(cl.m_id);
 			}
 		}
 
-		m_objects[client_id].send_move_packet(m_objects[client_id]);
+		// send self
+		m_objects[client_id].send_move_packet(m_objects[client_id]);		
 
-		for (auto& pl : near_list) {
-			auto& obj = m_objects[pl];
-
-			if (obj.is_NPC()) {
-				obj.m_vl_lock.lock();
-				if (m_objects[pl].m_view_list.count(client_id)) {
-					obj.m_vl_lock.unlock();
-					m_objects[pl].send_move_packet(m_objects[client_id]);
-				}
-				else {
-					obj.m_vl_lock.unlock();
-					m_objects[pl].send_add_object_packet(m_objects[client_id]);
-				}
+		// send
+		for (int player_id : new_view_list) {
+			if (0 == old_view_list.count(player_id)) {
+				m_objects[client_id].send_add_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_add_object_packet(m_objects[client_id]);
 			}
-
-			if (old_vlist.count(pl) == 0)
-				m_objects[client_id].send_add_object_packet(m_objects[pl]);
+			else {
+				m_objects[player_id].send_move_packet(m_objects[client_id]);
+			}
 		}
 
-		for (auto& pl : old_vlist) {
-			if (0 == near_list.count(pl)) {
-				m_objects[client_id].send_remove_object_packet(m_objects[pl]);
-
-				if (m_objects[pl].is_NPC())
-					m_objects[pl].send_remove_object_packet(m_objects[client_id]);
+		for (int player_id : old_view_list) {
+			if (0 == new_view_list.count(player_id)) {
+				m_objects[client_id].send_remove_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_remove_object_packet(m_objects[client_id]);
 			}
-			break;
 		}
 	}
 	}

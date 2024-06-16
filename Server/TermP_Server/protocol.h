@@ -11,7 +11,7 @@ constexpr int W_HEIGHT = 2000;
 // add
 constexpr int BUF_SIZE = 200;
 
-constexpr int VIEW_RANGE = 15;
+constexpr int VIEW_RANGE = 5;
 
 // Packet ID
 constexpr char CS_LOGIN = 0;
