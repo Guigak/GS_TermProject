@@ -18,12 +18,9 @@ constexpr float MINIMAP_HEIGHT = 200.0f;
 
 constexpr float MINIMAP_PLAYER_SIZE = 5.0f;
 
-constexpr auto SCREEN_WIDTH = 16;
-constexpr auto SCREEN_HEIGHT = 16;
-
 constexpr auto TILE_WIDTH = 65;
-constexpr auto WINDOW_WIDTH = SCREEN_WIDTH * TILE_WIDTH;   // size of window
-constexpr auto WINDOW_HEIGHT = SCREEN_WIDTH * TILE_WIDTH;
+constexpr auto WINDOW_WIDTH = CLIENT_WIDTH * TILE_WIDTH;   // size of window
+constexpr auto WINDOW_HEIGHT = CLIENT_HEIGHT * TILE_WIDTH;
 
 int g_left_x;
 int g_top_y;
@@ -253,8 +250,8 @@ void client_main()
 	if (recv_result != sf::Socket::NotReady)
 		if (received > 0) process_data(net_buf, received);
 
-	for (int i = 0; i < SCREEN_WIDTH; ++i)
-		for (int j = 0; j < SCREEN_HEIGHT; ++j)
+	for (int i = 0; i < CLIENT_WIDTH; ++i)
+		for (int j = 0; j < CLIENT_HEIGHT; ++j)
 		{
 			int tile_x = i + g_left_x;
 			int tile_y = j + g_top_y;

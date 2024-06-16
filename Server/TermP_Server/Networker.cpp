@@ -142,66 +142,100 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 	case CS_LOGIN: {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(m_objects[client_id].m_name, p->name);
+		int new_x = m_objects[client_id].m_x = rand() % W_WIDTH;
+		int new_y = m_objects[client_id].m_y = rand() % W_HEIGHT;
 		{
 			std::lock_guard<std::mutex> ll(m_objects[client_id].m_s_lock);
-			m_objects[client_id].m_x = rand() % W_WIDTH;
-			m_objects[client_id].m_y = rand() % W_HEIGHT;
 			m_objects[client_id].m_state = ST_INGAME;
 		}
 		m_objects[client_id].send_login_info_packet();
-		for (auto& pl : m_objects) {
-			{
-				std::lock_guard<std::mutex> ll(pl.m_s_lock);
 
-				if (ST_INGAME != pl.m_state) {
+		// Sector
+		int new_sector_x = m_objects[client_id].m_sector_x = new_x / SECTOR_WIDTH;
+		int new_sector_y = m_objects[client_id].m_sector_y = new_y / SECTOR_HEIGHT;
+
+		m_sectors.add_id(client_id, new_sector_x, new_sector_y);
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
+
+		// send
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == client_id) {
 					continue;
 				}
-			}
 
-			if (pl.m_id == client_id) {
-				continue;
-			}
+				if (false == m_objects[client_id].can_see(m_objects[id])) {
+					continue;
+				}
 
-			if (false == m_objects[client_id].can_see(pl)) {
-				continue;
+				m_objects[id].send_add_object_packet(m_objects[client_id]);
+				m_objects[client_id].send_add_object_packet(m_objects[id]);
 			}
-
-			m_objects[client_id].send_add_object_packet(pl);
 		}
 		break;
 	}
 	case CS_MOVE: {
 		CS_MOVE_PACKET* p = reinterpret_cast<CS_MOVE_PACKET*>(packet);
 		m_objects[client_id].m_last_move_time = p->move_time;
-		short x = m_objects[client_id].m_x;
-		short y = m_objects[client_id].m_y;
+		short new_x = m_objects[client_id].m_x;
+		short new_y = m_objects[client_id].m_y;
 
 		// move
 		switch (p->direction) {
 		case 0:
-			if (y > 0) {
-				y--;
+			if (new_y > 0) {
+				new_y--;
 			}
 			break;
 		case 1:
-			if (y < W_HEIGHT - 1) {
-				y++;
+			if (new_y < W_HEIGHT - 1) {
+				new_y++;
 			}
 			break;
 		case 2:
-			if (x > 0) {
-				x--;
+			if (new_x > 0) {
+				new_x--;
 			}
 			break;
 		case 3:
-			if (x < W_WIDTH - 1) {
-				x++;
+			if (new_x < W_WIDTH - 1) {
+				new_x++;
 			}
 			break;
 		}
 
-		m_objects[client_id].m_x = x;
-		m_objects[client_id].m_y = y;
+		m_objects[client_id].m_x = new_x;
+		m_objects[client_id].m_y = new_y;
+
+		// Sector
+		int old_sector_x = m_objects[client_id].m_sector_x;
+		int old_sector_y = m_objects[client_id].m_sector_y;
+
+		int new_sector_x = m_objects[client_id].m_x / SECTOR_WIDTH;
+		int new_sector_y = m_objects[client_id].m_y / SECTOR_HEIGHT;
+
+		if (old_sector_x != new_sector_x || old_sector_y != new_sector_y) {
+			m_sectors.change_sector(client_id, old_sector_x, old_sector_y, new_sector_x, new_sector_y);
+		}
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
 
 		// view list
 		std::unordered_set<int> new_view_list;
@@ -209,24 +243,35 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		std::unordered_set<int> old_view_list = m_objects[client_id].m_view_list;
 		m_objects[client_id].m_vl_lock.unlock();
 
-		for (auto& cl : m_objects) {
-			if (cl.m_state != ST_INGAME) {
-				continue;
-			}
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
 
-			if (cl.m_id == client_id) {
-				continue;
-			}
+			if ((*sector).ids.size() == 0) continue;
 
-			if (m_objects[client_id].can_see(cl)) {
-				new_view_list.insert(cl.m_id);
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == client_id) {
+					continue;
+				}
+
+				if (false == m_objects[client_id].can_see(m_objects[id])) {
+					continue;
+				}
+
+				new_view_list.insert(id);
 			}
 		}
 
-		// send self
-		m_objects[client_id].send_move_packet(m_objects[client_id]);		
-
 		// send
+		m_objects[client_id].send_move_packet(m_objects[client_id]);
+
 		for (int player_id : new_view_list) {
 			if (0 == old_view_list.count(player_id)) {
 				m_objects[client_id].send_add_object_packet(m_objects[player_id]);
@@ -249,6 +294,8 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 }
 
 void CNetworker::disconnect(int client_id) {
+	m_sectors.remove_id(client_id, m_objects[client_id].m_sector_x, m_objects[client_id].m_sector_y);
+
 	m_objects[client_id].m_vl_lock.lock();
 	std::unordered_set <int> vl = m_objects[client_id].m_view_list;
 	m_objects[client_id].m_vl_lock.unlock();

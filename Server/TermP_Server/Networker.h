@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "Object.h"
+#include "Sector.h"
 
 class CNetworker {
 	HANDLE m_h_iocp;
@@ -9,6 +10,8 @@ class CNetworker {
 	OVERLAPPED_EX m_over_ex;
 
 	std::array<CObject, MAX_NPC + MAX_USER> m_objects;
+
+	CSector m_sectors;
 
 public :
 	CNetworker() {};
