@@ -11,7 +11,6 @@ class CObject {
 public :
 	std::mutex m_s_lock;	// s : state
 	OBJECT_STATE m_state;
-	std::atomic_bool m_active;
 	int m_id;
 	SOCKET m_socket;
 	short m_x;
@@ -23,6 +22,12 @@ public :
 	int m_last_move_time;
 	int m_sector_x;
 	int m_sector_y;
+
+	std::atomic_bool m_active;
+
+	// Lua
+	lua_State* m_Lua;
+	std::mutex m_lua_mtx;
 
 	//
 	CObject();
@@ -45,6 +50,5 @@ public :
 	//
 	bool is_NPC() { return m_id < MAX_NPC; }
 	bool can_see(CObject& object);
-
 };
 

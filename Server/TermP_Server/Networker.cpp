@@ -1,6 +1,45 @@
 #include "Networker.h"
 
+std::array<CObject, MAX_NPC + MAX_USER> m_objects;
+
+// lua
+int API_get_x(lua_State* L)
+{
+	int user_id = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+	int x = m_objects[user_id].m_x;
+	lua_pushnumber(L, x);
+	return 1;
+}
+
+int API_get_y(lua_State* L)
+{
+	int user_id = (int)lua_tointeger(L, -1);
+	lua_pop(L, 2);
+	int y = m_objects[user_id].m_y;
+	lua_pushnumber(L, y);
+	return 1;
+}
+
+int API_SendMessage(lua_State* L)
+{
+	int my_id = (int)lua_tointeger(L, -3);
+	int user_id = (int)lua_tointeger(L, -2);
+	char* mess = (char*)lua_tostring(L, -1);
+
+	lua_pop(L, 4);
+
+	m_objects[user_id].send_chat_packet(m_objects[my_id], mess);
+	return 0;
+}
+
+void CNetworker::set_timer(CTimer* p_timer) {
+	m_p_timer = p_timer;
+	m_p_timer->set_iocp(&m_h_iocp);
+}
+
 void CNetworker::init() {
+	// socket
 	WSADATA WSAData;
 	WSAStartup(MAKEWORD(2, 2), &WSAData);
 
@@ -21,6 +60,39 @@ void CNetworker::init() {
 	CreateIoCompletionPort(reinterpret_cast<HANDLE>(m_s_socket), m_h_iocp, 9999, 0);
 	m_over_ex.m_option = OP_ACCEPT;
 	AcceptEx(m_s_socket, m_c_socket, m_over_ex.m_s_buf, 0, addr_size + 16, addr_size + 16, 0, &m_over_ex.m_overlapped);
+
+	// npc
+	std::cout << "NPC Initialize Start" << std::endl;
+
+	for (int i = 0; i < MAX_NPC; ++i) {
+		m_objects[i].m_x = rand() % W_WIDTH;
+		m_objects[i].m_y = rand() % W_HEIGHT;
+
+		int new_sector_x = m_objects[i].m_sector_x = m_objects[i].m_x / SECTOR_WIDTH;
+		int new_sector_y = m_objects[i].m_sector_y = m_objects[i].m_y / SECTOR_HEIGHT;
+
+		m_sectors.add_id(i, new_sector_x, new_sector_y);
+
+		m_objects[i].m_id = i;
+		sprintf_s(m_objects[i].m_name, "N%d", i);
+		m_objects[i].m_state = ST_INGAME;
+		m_objects[i].m_active = false;
+
+		auto Lua = m_objects[i].m_Lua = luaL_newstate();
+		luaL_openlibs(Lua);
+		luaL_loadfile(Lua, "npc.lua");
+		lua_pcall(Lua, 0, 0, 0);
+
+		lua_getglobal(Lua, "set_uid");
+		lua_pushnumber(Lua, i);
+		lua_pcall(Lua, 1, 0, 0);
+
+		lua_register(Lua, "API_SendMessage", API_SendMessage);
+		lua_register(Lua, "API_get_x", API_get_x);
+		lua_register(Lua, "API_get_y", API_get_y);
+	}
+
+	std::cout << "NPC Initialize End" << std::endl;
 }
 
 void CNetworker::work() {
@@ -63,7 +135,8 @@ void CNetworker::work() {
 
 		// Processing
 		switch (over_ex->m_option) {
-		case OP_ACCEPT: {
+		case OP_ACCEPT:
+		{
 			int client_id = get_new_client_id();
 
 			if (client_id != -1) {
@@ -90,7 +163,8 @@ void CNetworker::work() {
 			AcceptEx(m_s_socket, m_c_socket, m_over_ex.m_s_buf, 0, addr_size + 16, addr_size + 16, 0, &m_over_ex.m_overlapped);
 			break;
 		}
-		case OP_RECV: {
+		case OP_RECV:
+		{
 			int remain_data = bytes + m_objects[key].m_remain_size;
 			char* p = over_ex->m_s_buf;
 
@@ -116,6 +190,37 @@ void CNetworker::work() {
 		case OP_SEND:
 			delete over_ex;
 			break;
+		case OP_RANDOM_MOVE:
+			for (int i = MAX_NPC; i < MAX_NPC + MAX_USER; ++i) {
+				if (m_objects[i].m_state != ST_INGAME) {
+					continue;
+				}
+
+				if (true == m_objects[key].can_see(m_objects[i])) {
+					random_move(m_objects[key]);
+					m_p_timer->add_event(key, 1000, EV_RANDOM_MOVE, -1);
+				}
+				else {
+					m_objects[key].m_active = false;
+				}
+			}
+
+			delete over_ex;
+			break;
+		case OP_NPC_MOVE:
+		{
+			m_objects[key].m_lua_mtx.lock();
+			auto L = m_objects[key].m_Lua;
+			lua_getglobal(L, "event_player_move");
+			lua_pushnumber(L, over_ex->m_target_id);
+			lua_pcall(L, 1, 0, 0);
+			//lua_pop(L, 1);
+			m_objects[key].m_lua_mtx.unlock();
+			delete over_ex;
+		}
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -123,6 +228,133 @@ void CNetworker::work() {
 void CNetworker::clear() {
 	closesocket(m_s_socket);
 	WSACleanup();
+}
+
+void CNetworker::random_move(CObject& object) {
+	short new_x = object.m_x;
+	short new_y = object.m_y;
+
+	std::unordered_set<SECTOR*> old_sectors_arr;
+
+	m_sectors.calculate_around_sector(new_x, new_y, old_sectors_arr);
+
+	std::unordered_set<int> old_view_list;
+
+	for (auto& sector : old_sectors_arr) {
+		std::lock_guard<std::mutex> lock((*sector).mtx);
+
+		if ((*sector).ids.size() == 0) continue;
+
+		for (auto& id : (*sector).ids) {
+			{
+				std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+				if (ST_INGAME != m_objects[id].m_state) {
+					continue;
+				}
+			}
+
+			if (m_objects[id].m_id == object.m_id) {
+				continue;
+			}
+
+			if (false == object.can_see(m_objects[id])) {
+				continue;
+			}
+
+			old_view_list.insert(id);
+		}
+	}
+
+	// move
+	switch (rand() % 4) {
+	case 0:
+		if (new_y > 0) {
+			new_y--;
+		}
+		break;
+	case 1:
+		if (new_y < W_HEIGHT - 1) {
+			new_y++;
+		}
+		break;
+	case 2:
+		if (new_x > 0) {
+			new_x--;
+		}
+		break;
+	case 3:
+		if (new_x < W_WIDTH - 1) {
+			new_x++;
+		}
+		break;
+	}
+
+	object.m_x = new_x;
+	object.m_y = new_y;
+
+	int old_sector_x = object.m_sector_x;
+	int old_sector_y = object.m_sector_y;
+
+	int new_sector_x = object.m_x / SECTOR_WIDTH;
+	int new_sector_y = object.m_y / SECTOR_HEIGHT;
+
+	if (old_sector_x != new_sector_x || old_sector_y != new_sector_y) {
+		m_sectors.change_sector(object.m_id, old_sector_x, old_sector_y, new_sector_x, new_sector_y);
+	}
+
+	std::unordered_set<SECTOR*> new_sectors_arr;
+
+	m_sectors.calculate_around_sector(new_x, new_y, new_sectors_arr);
+
+	std::unordered_set<int> new_view_list;
+
+	for (auto& sector : new_sectors_arr) {
+		std::lock_guard<std::mutex> lock((*sector).mtx);
+
+		if ((*sector).ids.size() == 0) continue;
+
+		for (auto& id : (*sector).ids) {
+			{
+				std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+				if (ST_INGAME != m_objects[id].m_state) {
+					continue;
+				}
+			}
+
+			if (m_objects[id].m_id == object.m_id) {
+				continue;
+			}
+
+			if (false == object.can_see(m_objects[id])) {
+				continue;
+			}
+
+			new_view_list.insert(id);
+		}
+	}
+
+	// send
+	for (int player_id : new_view_list) {
+		if (0 == old_view_list.count(player_id)) {
+			m_objects[player_id].send_add_object_packet(object);
+		}
+		else {
+			m_objects[player_id].send_move_packet(object);
+		}
+
+		OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+		over_ex->m_option = OP_NPC_MOVE;
+		over_ex->m_target_id = m_objects[player_id].m_id;
+		PostQueuedCompletionStatus(m_h_iocp, 1, object.m_id, &over_ex->m_overlapped);
+	}
+
+	for (int player_id : old_view_list) {
+		if (0 == new_view_list.count(player_id)) {
+			m_objects[player_id].send_remove_object_packet(object);
+		}
+	}
 }
 
 int CNetworker::get_new_client_id() {
@@ -139,7 +371,8 @@ int CNetworker::get_new_client_id() {
 
 void CNetworker::prcs_packet(int client_id, char* packet) {
 	switch (packet[2]) {
-	case CS_LOGIN: {
+	case CS_LOGIN:
+	{
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(m_objects[client_id].m_name, p->name);
 		int new_x = m_objects[client_id].m_x = rand() % W_WIDTH;
@@ -185,11 +418,30 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 
 				m_objects[id].send_add_object_packet(m_objects[client_id]);
 				m_objects[client_id].send_add_object_packet(m_objects[id]);
+
+				//
+				if (true == m_objects[id].is_NPC()) {
+					if (m_objects[id].m_active == false) {
+						bool old_active = false;
+						bool new_active = true;
+
+						if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+							m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+						}
+					}
+					else {
+						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+						over_ex->m_option = OP_NPC_MOVE;
+						over_ex->m_target_id = client_id;
+						PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+					}
+				}
 			}
 		}
 		break;
 	}
-	case CS_MOVE: {
+	case CS_MOVE:
+	{
 		CS_MOVE_PACKET* p = reinterpret_cast<CS_MOVE_PACKET*>(packet);
 		m_objects[client_id].m_last_move_time = p->move_time;
 		short new_x = m_objects[client_id].m_x;
@@ -266,6 +518,24 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 				}
 
 				new_view_list.insert(id);
+
+				//
+				if (true == m_objects[id].is_NPC()) {
+					if (m_objects[id].m_active == false) {
+						bool old_active = false;
+						bool new_active = true;
+
+						if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+							m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+						}
+					}
+					else {
+						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+						over_ex->m_option = OP_NPC_MOVE;
+						over_ex->m_target_id = client_id;
+						PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+					}
+				}
 			}
 		}
 

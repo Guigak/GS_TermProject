@@ -98,6 +98,16 @@ void CObject::send_move_packet(CObject& object) {
 }
 
 void CObject::send_chat_packet(CObject& object, const char* message) {
+	if (true == is_NPC()) {
+		return;
+	}
+
+	SC_CHAT_PACKET packet;
+	packet.size = sizeof(packet);
+	packet.type = SC_CHAT;
+	packet.id = object.m_id;
+	strcpy_s(packet.mess, message);
+	send(&packet);
 }
 
 bool CObject::can_see(CObject& object) {

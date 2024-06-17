@@ -131,6 +131,7 @@
     <ClCompile Include="Networker.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="Sector.cpp" />
+    <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
@@ -138,6 +139,10 @@
     <ClInclude Include="Object.h" />
     <ClInclude Include="protocol.h" />
     <ClInclude Include="Sector.h" />
+    <ClInclude Include="Timer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="npc.lua" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

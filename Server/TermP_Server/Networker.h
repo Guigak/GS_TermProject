@@ -2,6 +2,7 @@
 #include "common.h"
 #include "Object.h"
 #include "Sector.h"
+#include "Timer.h"
 
 class CNetworker {
 	HANDLE m_h_iocp;
@@ -9,17 +10,21 @@ class CNetworker {
 	SOCKET m_c_socket;	// c : client
 	OVERLAPPED_EX m_over_ex;
 
-	std::array<CObject, MAX_NPC + MAX_USER> m_objects;
-
 	CSector m_sectors;
+
+	CTimer* m_p_timer;
 
 public :
 	CNetworker() {};
 	~CNetworker() {};
 
+	void set_timer(CTimer* p_timer);
+
 	void init();
 	void work();
 	void clear();
+
+	void random_move(CObject& object);
 
 	int get_new_client_id();
 	void prcs_packet(int client_id, char* packet);

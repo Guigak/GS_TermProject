@@ -3,6 +3,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <Windows.h>
+#include <chrono>
 using namespace std;
 
 //#pragma comment (lib, "opengl32.lib")
@@ -35,6 +36,8 @@ private:
 	sf::Sprite m_sprite;
 
 	sf::Text m_name;
+	sf::Text m_chat;
+	chrono::system_clock::time_point m_mess_end_time;
 public:
 	int m_x, m_y;
 	char name[NAME_SIZE];
@@ -74,14 +77,27 @@ public:
 		m_sprite.setPosition(rx, ry);
 		g_window->draw(m_sprite);
 		auto size = m_name.getGlobalBounds();
-		m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
-		g_window->draw(m_name);
+		if (m_mess_end_time < chrono::system_clock::now()) {
+			m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_name);
+		}
+		else {
+			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_chat);
+		}
 	}
 	void set_name(const char str[]) {
 		m_name.setFont(g_font);
 		m_name.setString(str);
 		m_name.setFillColor(sf::Color(255, 255, 0));
 		m_name.setStyle(sf::Text::Bold);
+	}
+	void set_chat(const char str[]) {
+		m_chat.setFont(g_font);
+		m_chat.setString(str);
+		m_chat.setFillColor(sf::Color(255, 255, 255));
+		m_chat.setStyle(sf::Text::Bold);
+		m_mess_end_time = chrono::system_clock::now() + chrono::seconds(3);
 	}
 };
 
@@ -177,7 +193,7 @@ void ProcessPacket(char* ptr)
 			g_left_x = my_packet->x - 8;
 			g_top_y = my_packet->y - 8;
 		}
-		else /*if (other_id < MAX_USER)*/ {
+		else /*if (other_id < MAX_USER)*/ { 
 			players[other_id].move(my_packet->x, my_packet->y);
 		}
 		//else {
@@ -200,6 +216,19 @@ void ProcessPacket(char* ptr)
 		//else {
 		//	//		npc[other_id - NPC_START].attr &= ~BOB_ATTR_VISIBLE;
 		//}
+		break;
+	}
+	case SC_CHAT:
+	{
+		SC_CHAT_PACKET* my_packet = reinterpret_cast<SC_CHAT_PACKET*>(ptr);
+		int other_id = my_packet->id;
+
+		if (other_id == g_myid) {
+			avatar.set_chat(my_packet->mess);
+		}
+		else {
+			players[other_id].set_chat(my_packet->mess);
+		}
 		break;
 	}
 	default:
