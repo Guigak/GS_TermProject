@@ -154,6 +154,11 @@ bool CDatabase::login(int id, char name[NAME_SIZE]) {
 
 			PLAYER_INFO* info = new PLAYER_INFO;
 			WideCharToMultiByte(CP_ACP, 0, nickname, -1, info->nickname, NAME_SIZE, NULL, NULL);
+
+			while (info->nickname[strlen(info->nickname) - 1] == ' ') {
+				info->nickname[strlen(info->nickname) - 1] = info->nickname[strlen(info->nickname)];
+			}
+
 			info->visual = visual;
 			info->max_hp = max_hp;
 			info->hp = hp;
