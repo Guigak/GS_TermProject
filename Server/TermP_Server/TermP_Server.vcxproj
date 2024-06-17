@@ -129,6 +129,7 @@
   <ItemGroup>
     <ClCompile Include="Database.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Map.cpp" />
     <ClCompile Include="Networker.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="Sector.cpp" />
@@ -137,6 +138,7 @@
   <ItemGroup>
     <ClInclude Include="common.h" />
     <ClInclude Include="Database.h" />
+    <ClInclude Include="Map.h" />
     <ClInclude Include="Networker.h" />
     <ClInclude Include="Object.h" />
     <ClInclude Include="protocol.h" />

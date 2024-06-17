@@ -4,6 +4,7 @@
 #include "Sector.h"
 #include "Timer.h"
 #include "Database.h"
+#include "Map.h"
 
 class CNetworker {
 	HANDLE m_h_iocp;
@@ -16,6 +17,8 @@ class CNetworker {
 	CTimer* m_p_timer;
 
 	CDatabase* m_p_database;
+
+	CMap m_map;
 
 public :
 	CNetworker() {};

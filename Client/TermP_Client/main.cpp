@@ -406,8 +406,8 @@ void client_main()
 			int tile_y = j + g_top_y;
 			if ((tile_x < 0) || (tile_y < 0) || (tile_x > WORLD_WIDTH - 1) || (tile_y > WORLD_WIDTH - 1)) continue;
 
-			tiles[tile_map[tile_x][tile_y]].a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-			tiles[tile_map[tile_x][tile_y]].a_draw();
+			tiles[tile_map[tile_y][tile_x]].a_move(TILE_WIDTH * i, TILE_WIDTH * j);
+			tiles[tile_map[tile_y][tile_x]].a_draw();
 
 			//if (0 == (tile_x / 3 + tile_y / 3) % 2) {
 			//	white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
@@ -461,7 +461,7 @@ int main()
 	for (int i = 0; i < 2000; ++i) {
 		for (int j = 0; j < 2000; ++j) {
 			ifile >> num;
-			tile_map[j][i] = num;
+			tile_map[i][j] = num;
 
 			//if (num >= 48) {
 			//	tile_map[j][i] = 29;

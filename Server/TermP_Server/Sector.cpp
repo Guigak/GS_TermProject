@@ -6,6 +6,10 @@ void CSector::add_id(int id, int x, int y) {
 }
 
 void CSector::remove_id(int id, int x, int y) {
+	if (x == -1 || y == -1) {
+		return;
+	}
+
 	std::lock_guard<std::mutex> lock(m_Sectors[y][x].mtx);
 	m_Sectors[y][x].ids.erase(id);
 }

@@ -44,6 +44,11 @@ void CNetworker::set_database(CDatabase* p_database) {
 }
 
 void CNetworker::init() {
+	if (false == m_map.load_map()) {
+		std::cout << "Map Load ERROR" << std::endl;
+		exit(0);
+	}
+
 	// socket
 	WSADATA WSAData;
 	WSAStartup(MAKEWORD(2, 2), &WSAData);
@@ -238,6 +243,8 @@ void CNetworker::work() {
 					}
 				}
 			}
+
+			delete info;
 			break;
 		}
 		case OP_LOGIN_FAIL:
@@ -316,6 +323,10 @@ void CNetworker::clear() {
 void CNetworker::random_move(CObject& object) {
 	short new_x = object.m_x;
 	short new_y = object.m_y;
+
+	if (false == m_map.can_move(new_y, new_x)) {
+		return;
+	}
 
 	std::unordered_set<SECTOR*> old_sectors_arr;
 
@@ -460,70 +471,6 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		strcpy_s(m_objects[client_id].m_name, p->name);
 
 		m_p_database->add_query(client_id, m_objects[client_id].m_name, Q_LOGIN, -1);
-
-		//int new_x = m_objects[client_id].m_x = rand() % W_WIDTH;
-		//int new_y = m_objects[client_id].m_y = rand() % W_HEIGHT;
-		//{
-		//	std::lock_guard<std::mutex> ll(m_objects[client_id].m_s_lock);
-		//	m_objects[client_id].m_state = ST_INGAME;
-		//}
-		//m_objects[client_id].send_login_info_packet();
-
-		//// Sector
-		//int new_sector_x = m_objects[client_id].m_sector_x = new_x / SECTOR_WIDTH;
-		//int new_sector_y = m_objects[client_id].m_sector_y = new_y / SECTOR_HEIGHT;
-
-		//m_sectors.add_id(client_id, new_sector_x, new_sector_y);
-
-		//std::unordered_set<SECTOR*> sectors_arr;
-
-		//m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
-
-		//// send
-		//for (auto& sector : sectors_arr) {
-		//	std::lock_guard<std::mutex> lock((*sector).mtx);
-
-		//	if ((*sector).ids.size() == 0) continue;
-
-		//	for (auto& id : (*sector).ids) {
-		//		{
-		//			std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
-
-		//			if (ST_INGAME != m_objects[id].m_state) {
-		//				continue;
-		//			}
-		//		}
-
-		//		if (m_objects[id].m_id == client_id) {
-		//			continue;
-		//		}
-
-		//		if (false == m_objects[client_id].can_see(m_objects[id])) {
-		//			continue;
-		//		}
-
-		//		m_objects[id].send_add_object_packet(m_objects[client_id]);
-		//		m_objects[client_id].send_add_object_packet(m_objects[id]);
-
-		//		//
-		//		if (true == m_objects[id].is_NPC()) {
-		//			if (m_objects[id].m_active == false) {
-		//				bool old_active = false;
-		//				bool new_active = true;
-
-		//				if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
-		//					m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
-		//				}
-		//			}
-		//			else {
-		//				OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
-		//				over_ex->m_option = OP_NPC_MOVE;
-		//				over_ex->m_target_id = client_id;
-		//				PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
-		//			}
-		//		}
-		//	}
-		//}
 		break;
 	}
 	case CS_MOVE:
@@ -555,6 +502,10 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 				new_x++;
 			}
 			break;
+		}
+
+		if (false == m_map.can_move(new_y, new_x)) {
+			return;
 		}
 
 		m_objects[client_id].m_x = new_x;
