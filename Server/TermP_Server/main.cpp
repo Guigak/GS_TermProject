@@ -4,8 +4,14 @@
 
 CNetworker g_NW;
 CTimer g_timer;
+CDatabase g_DB;
 
 int main() {
+	if (false == g_DB.connect()) {
+		std::cout << "DB Connect ERROR" << std::endl;
+		return 0;
+	}
+
 	g_NW.set_timer(&g_timer);
 	g_NW.init();
 
@@ -25,4 +31,5 @@ int main() {
 	timer_thread.join();
 
 	g_NW.clear();
+	g_DB.disconnect();
 }

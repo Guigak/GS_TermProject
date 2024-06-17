@@ -76,6 +76,9 @@ struct SC_LOGIN_INFO_PACKET {
 	int		exp;
 	int		level;
 	short	x, y;
+	// add
+	int		potion_s;
+	int		potion_l;
 };
 
 struct SC_ADD_OBJECT_PACKET {
@@ -120,7 +123,9 @@ struct SC_STAT_CHANGE_PACKET {
 	int		max_hp;
 	int		exp;
 	int		level;
-
+	// add
+	int		potion_s;
+	int		potion_l;
 };
 
 #pragma pack (pop)

@@ -3,6 +3,7 @@
 #include "Object.h"
 #include "Sector.h"
 #include "Timer.h"
+#include "Database.h"
 
 class CNetworker {
 	HANDLE m_h_iocp;
@@ -14,11 +15,14 @@ class CNetworker {
 
 	CTimer* m_p_timer;
 
+	CDatabase* m_p_database;
+
 public :
 	CNetworker() {};
 	~CNetworker() {};
 
 	void set_timer(CTimer* p_timer);
+	void set_database(CDatabase* p_database);
 
 	void init();
 	void work();

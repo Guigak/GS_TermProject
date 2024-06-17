@@ -38,6 +38,11 @@ void CNetworker::set_timer(CTimer* p_timer) {
 	m_p_timer->set_iocp(&m_h_iocp);
 }
 
+void CNetworker::set_database(CDatabase* p_database) {
+	m_p_database = p_database;
+	m_p_database->set_iocp(&m_h_iocp);
+}
+
 void CNetworker::init() {
 	// socket
 	WSADATA WSAData;
@@ -144,6 +149,7 @@ void CNetworker::work() {
 					std::lock_guard<std::mutex> ll(m_objects[client_id].m_s_lock);
 					m_objects[client_id].m_state = ST_ALLOC;
 				}
+
 				m_objects[client_id].m_x = 0;
 				m_objects[client_id].m_y = 0;
 				m_objects[client_id].m_id = client_id;
@@ -161,6 +167,10 @@ void CNetworker::work() {
 			ZeroMemory(&m_over_ex.m_overlapped, sizeof(m_over_ex.m_overlapped));
 			int addr_size = sizeof(SOCKADDR_IN);
 			AcceptEx(m_s_socket, m_c_socket, m_over_ex.m_s_buf, 0, addr_size + 16, addr_size + 16, 0, &m_over_ex.m_overlapped);
+			break;
+		}
+		case OP_LOGIN_OK:
+		{
 			break;
 		}
 		case OP_RECV:
