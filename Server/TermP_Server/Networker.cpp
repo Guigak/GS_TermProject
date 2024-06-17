@@ -171,6 +171,79 @@ void CNetworker::work() {
 		}
 		case OP_LOGIN_OK:
 		{
+			PLAYER_INFO* info = reinterpret_cast<PLAYER_INFO*>(over_ex->m_data);
+
+			strcpy_s(m_objects[key].m_name, info->nickname);
+
+			int new_x = m_objects[key].m_x = info->x;
+			int new_y = m_objects[key].m_y = info->y;
+			{
+				std::lock_guard<std::mutex> ll(m_objects[key].m_s_lock);
+				m_objects[key].m_state = ST_INGAME;
+			}
+			m_objects[key].send_login_info_packet();
+
+			// Sector
+			int new_sector_x = m_objects[key].m_sector_x = new_x / SECTOR_WIDTH;
+			int new_sector_y = m_objects[key].m_sector_y = new_y / SECTOR_HEIGHT;
+
+			m_sectors.add_id(key, new_sector_x, new_sector_y);
+
+			std::unordered_set<SECTOR*> sectors_arr;
+
+			m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
+
+			// send
+			for (auto& sector : sectors_arr) {
+				std::lock_guard<std::mutex> lock((*sector).mtx);
+
+				if ((*sector).ids.size() == 0) continue;
+
+				for (auto& id : (*sector).ids) {
+					{
+						std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+						if (ST_INGAME != m_objects[id].m_state) {
+							continue;
+						}
+					}
+
+					if (m_objects[id].m_id == key) {
+						continue;
+					}
+
+					if (false == m_objects[key].can_see(m_objects[id])) {
+						continue;
+					}
+
+					m_objects[id].send_add_object_packet(m_objects[key]);
+					m_objects[key].send_add_object_packet(m_objects[id]);
+
+					//
+					if (true == m_objects[id].is_NPC()) {
+						if (m_objects[id].m_active == false) {
+							bool old_active = false;
+							bool new_active = true;
+
+							if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+								m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+							}
+						}
+						else {
+							OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+							over_ex->m_option = OP_NPC_MOVE;
+							over_ex->m_target_id = key;
+							PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+						}
+					}
+				}
+			}
+			break;
+		}
+		case OP_LOGIN_FAIL:
+		{
+			disconnect(key);
+
 			break;
 		}
 		case OP_RECV:
@@ -385,69 +458,72 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 	{
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(m_objects[client_id].m_name, p->name);
-		int new_x = m_objects[client_id].m_x = rand() % W_WIDTH;
-		int new_y = m_objects[client_id].m_y = rand() % W_HEIGHT;
-		{
-			std::lock_guard<std::mutex> ll(m_objects[client_id].m_s_lock);
-			m_objects[client_id].m_state = ST_INGAME;
-		}
-		m_objects[client_id].send_login_info_packet();
 
-		// Sector
-		int new_sector_x = m_objects[client_id].m_sector_x = new_x / SECTOR_WIDTH;
-		int new_sector_y = m_objects[client_id].m_sector_y = new_y / SECTOR_HEIGHT;
+		m_p_database->add_query(client_id, m_objects[client_id].m_name, Q_LOGIN, -1);
 
-		m_sectors.add_id(client_id, new_sector_x, new_sector_y);
+		//int new_x = m_objects[client_id].m_x = rand() % W_WIDTH;
+		//int new_y = m_objects[client_id].m_y = rand() % W_HEIGHT;
+		//{
+		//	std::lock_guard<std::mutex> ll(m_objects[client_id].m_s_lock);
+		//	m_objects[client_id].m_state = ST_INGAME;
+		//}
+		//m_objects[client_id].send_login_info_packet();
 
-		std::unordered_set<SECTOR*> sectors_arr;
+		//// Sector
+		//int new_sector_x = m_objects[client_id].m_sector_x = new_x / SECTOR_WIDTH;
+		//int new_sector_y = m_objects[client_id].m_sector_y = new_y / SECTOR_HEIGHT;
 
-		m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
+		//m_sectors.add_id(client_id, new_sector_x, new_sector_y);
 
-		// send
-		for (auto& sector : sectors_arr) {
-			std::lock_guard<std::mutex> lock((*sector).mtx);
+		//std::unordered_set<SECTOR*> sectors_arr;
 
-			if ((*sector).ids.size() == 0) continue;
+		//m_sectors.calculate_around_sector(new_x, new_y, sectors_arr);
 
-			for (auto& id : (*sector).ids) {
-				{
-					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+		//// send
+		//for (auto& sector : sectors_arr) {
+		//	std::lock_guard<std::mutex> lock((*sector).mtx);
 
-					if (ST_INGAME != m_objects[id].m_state) {
-						continue;
-					}
-				}
+		//	if ((*sector).ids.size() == 0) continue;
 
-				if (m_objects[id].m_id == client_id) {
-					continue;
-				}
+		//	for (auto& id : (*sector).ids) {
+		//		{
+		//			std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
 
-				if (false == m_objects[client_id].can_see(m_objects[id])) {
-					continue;
-				}
+		//			if (ST_INGAME != m_objects[id].m_state) {
+		//				continue;
+		//			}
+		//		}
 
-				m_objects[id].send_add_object_packet(m_objects[client_id]);
-				m_objects[client_id].send_add_object_packet(m_objects[id]);
+		//		if (m_objects[id].m_id == client_id) {
+		//			continue;
+		//		}
 
-				//
-				if (true == m_objects[id].is_NPC()) {
-					if (m_objects[id].m_active == false) {
-						bool old_active = false;
-						bool new_active = true;
+		//		if (false == m_objects[client_id].can_see(m_objects[id])) {
+		//			continue;
+		//		}
 
-						if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
-							m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
-						}
-					}
-					else {
-						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
-						over_ex->m_option = OP_NPC_MOVE;
-						over_ex->m_target_id = client_id;
-						PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
-					}
-				}
-			}
-		}
+		//		m_objects[id].send_add_object_packet(m_objects[client_id]);
+		//		m_objects[client_id].send_add_object_packet(m_objects[id]);
+
+		//		//
+		//		if (true == m_objects[id].is_NPC()) {
+		//			if (m_objects[id].m_active == false) {
+		//				bool old_active = false;
+		//				bool new_active = true;
+
+		//				if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+		//					m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+		//				}
+		//			}
+		//			else {
+		//				OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+		//				over_ex->m_option = OP_NPC_MOVE;
+		//				over_ex->m_target_id = client_id;
+		//				PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+		//			}
+		//		}
+		//	}
+		//}
 		break;
 	}
 	case CS_MOVE:

@@ -38,6 +38,7 @@ void CObject::send_login_info_packet() {
 	packet.id = m_id;
 	packet.x = m_x;
 	packet.y = m_y;
+	strcpy_s(packet.name, m_name);
 	send(&packet);
 }
 

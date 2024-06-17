@@ -27,12 +27,16 @@ void CDatabase::work() {
 		else {
 			m_q_mtx.lock();
 			QUERY query = m_queue.front();
+			m_queue.pop();
 			m_q_mtx.unlock();
 
-			m_queue.pop();
 			switch (query.type) {
 			case Q_LOGIN:
-				login(query.id, query.name);
+				if (false == login(query.id, query.name)) {
+					OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+					over_ex->m_option = OP_LOGIN_FAIL;
+					PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.id, &over_ex->m_overlapped);
+				}
 				break;
 			default:
 				break;

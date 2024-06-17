@@ -11,12 +11,12 @@ constexpr int W_HEIGHT = 2000;
 // add
 constexpr int BUF_SIZE = 200;
 
-constexpr int VIEW_RANGE = 16;
+constexpr int VIEW_RANGE = 8;
 
 constexpr int WORLD_WIDTH = 2000;
 constexpr int WORLD_HEIGHT = 2000;
-constexpr int CLIENT_WIDTH = 16;
-constexpr int CLIENT_HEIGHT = 16;
+constexpr int CLIENT_WIDTH = 20;
+constexpr int CLIENT_HEIGHT = 20;
 constexpr int SECTOR_WIDTH = 40;
 constexpr int SECTOR_HEIGHT = 40;
 
@@ -77,6 +77,7 @@ struct SC_LOGIN_INFO_PACKET {
 	int		level;
 	short	x, y;
 	// add
+	char	name[NAME_SIZE];
 	int		potion_s;
 	int		potion_l;
 };

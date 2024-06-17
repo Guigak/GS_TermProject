@@ -130,6 +130,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="main_backup.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
