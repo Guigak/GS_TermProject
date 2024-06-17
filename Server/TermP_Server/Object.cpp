@@ -39,6 +39,11 @@ void CObject::send_login_info_packet() {
 	packet.x = m_x;
 	packet.y = m_y;
 	strcpy_s(packet.name, m_name);
+
+	packet.level = m_level;
+	packet.max_hp = m_max_hp;
+	packet.hp = m_hp;
+	packet.exp = m_exp;
 	send(&packet);
 }
 

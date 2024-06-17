@@ -179,6 +179,10 @@ void CNetworker::work() {
 			PLAYER_INFO* info = reinterpret_cast<PLAYER_INFO*>(over_ex->m_data);
 
 			strcpy_s(m_objects[key].m_name, info->nickname);
+			m_objects[key].m_level = info->level;
+			m_objects[key].m_max_hp = info->max_hp;
+			m_objects[key].m_hp = info->hp;
+			m_objects[key].m_exp = info->exp;
 
 			int new_x = m_objects[key].m_x = info->x;
 			int new_y = m_objects[key].m_y = info->y;

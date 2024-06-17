@@ -27,6 +27,10 @@ constexpr auto WINDOW_HEIGHT = CLIENT_HEIGHT * TILE_WIDTH;
 int g_left_x;
 int g_top_y;
 int g_myid;
+int g_level = 1;
+int g_hp = 100;
+int g_max_hp = 100;
+int g_exp = 0;
 
 sf::RenderWindow* g_window;
 sf::Font g_font;
@@ -113,6 +117,8 @@ sf::Texture* board;
 sf::Texture* pieces;
 
 //
+sf::RectangleShape status_rect;
+
 sf::RectangleShape minimap_map;
 sf::RectangleShape minimap_plr;
 
@@ -248,6 +254,9 @@ void client_initialize()
 	avatar.move(4, 4);
 
 	//
+	status_rect.setFillColor(sf::Color::Black);
+	status_rect.setSize(sf::Vector2f((float)WINDOW_WIDTH / 3, 20.0f * 4));
+
 	minimap_map.setFillColor(sf::Color::Black);
 	minimap_map.setSize(sf::Vector2f(200.0f, 200.0f));
 	minimap_plr.setFillColor(sf::Color::White);
@@ -279,6 +288,11 @@ void ProcessPacket(char* ptr)
 		//while (packet->name[strlen(packet->name) - 1] == ' ') {
 		//	packet->name[strlen(packet->name) - 1] = packet->name[strlen(packet->name)];
 		//}
+
+		g_level = packet->level;
+		g_max_hp = packet->max_hp;
+		g_hp = packet->hp;
+		g_exp = packet->exp;
 
 		avatar.show();
 	}
@@ -431,6 +445,32 @@ void client_main()
 	char buf[100];
 	sprintf_s(buf, "(%d, %d)", avatar.m_x, avatar.m_y);
 	text.setString(buf);
+	g_window->draw(text);
+
+	//
+	status_rect.setPosition((float)WINDOW_WIDTH / 2 - (float)WINDOW_WIDTH / 6, 0);
+	g_window->draw(status_rect);
+
+	// level
+	sprintf_s(buf, "Level : %d", g_level);
+	text.setString(buf);
+	auto size = text.getGlobalBounds();
+	text.setPosition((float)WINDOW_WIDTH / 2 - size.width / 2, 0);
+	g_window->draw(text);
+
+	// hp
+	sprintf_s(buf, "HP %d / %d", g_hp, g_max_hp);
+	text.setString(buf);
+	size = text.getGlobalBounds();
+	text.setPosition((float)WINDOW_WIDTH / 2 - size.width / 2, size.height);
+	g_window->draw(text);
+
+	// exp
+	int max_exp = std::pow(2, g_level - 1) * 100;
+	sprintf_s(buf, "EXP %d / %d", g_exp, (int)max_exp);
+	text.setString(buf);
+	size = text.getGlobalBounds();
+	text.setPosition((float)WINDOW_WIDTH / 2 - size.width / 2, size.height * 2);
 	g_window->draw(text);
 
 	//

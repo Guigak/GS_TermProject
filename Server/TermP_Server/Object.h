@@ -23,6 +23,12 @@ public :
 	int m_sector_x;
 	int m_sector_y;
 
+	//
+	int m_level;
+	int m_max_hp;
+	int m_hp;
+	int m_exp;
+
 	std::atomic_bool m_active;
 
 	// Lua

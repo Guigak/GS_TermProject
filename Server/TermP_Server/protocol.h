@@ -89,6 +89,10 @@ struct SC_ADD_OBJECT_PACKET {
 	int		visual;				// 어떻게 생긴 OBJECT인가를 지시
 	short	x, y;
 	char	name[NAME_SIZE];
+
+	// add
+	int max_hp;
+	int hp;
 };
 
 struct SC_REMOVE_OBJECT_PACKET {
