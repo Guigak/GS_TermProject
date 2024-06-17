@@ -470,7 +470,7 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(m_objects[client_id].m_name, p->name);
 
-		m_p_database->add_query(client_id, m_objects[client_id].m_name, Q_LOGIN, -1);
+		m_p_database->add_query(m_objects[client_id], Q_LOGIN, -1);
 		break;
 	}
 	case CS_MOVE:
@@ -601,7 +601,11 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 }
 
 void CNetworker::disconnect(int client_id) {
-	m_sectors.remove_id(client_id, m_objects[client_id].m_sector_x, m_objects[client_id].m_sector_y);
+	if (m_objects[client_id].m_state == ST_INGAME) {
+		m_sectors.remove_id(client_id, m_objects[client_id].m_sector_x, m_objects[client_id].m_sector_y);
+
+		m_p_database->add_query(m_objects[client_id], Q_LOGOUT, -1);
+	}
 
 	m_objects[client_id].m_vl_lock.lock();
 	std::unordered_set <int> vl = m_objects[client_id].m_view_list;

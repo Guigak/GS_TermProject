@@ -275,6 +275,11 @@ void ProcessPacket(char* ptr)
 		g_left_x = packet->x - CLIENT_WIDTH / 2;
 		g_top_y = packet->y - CLIENT_HEIGHT / 2;
 		avatar.set_name(packet->name);
+
+		//while (packet->name[strlen(packet->name) - 1] == ' ') {
+		//	packet->name[strlen(packet->name) - 1] = packet->name[strlen(packet->name)];
+		//}
+
 		avatar.show();
 	}
 	break;

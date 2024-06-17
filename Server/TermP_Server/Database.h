@@ -1,13 +1,13 @@
 #pragma once
 #include "common.h"
+#include "Object.h"
 
 enum QUERY_TYPE {
-	Q_LOGIN
+	Q_LOGIN, Q_LOGOUT
 };
 
 struct QUERY {
-	int id;
-	char name[NAME_SIZE];
+	CObject* p_object;
 	QUERY_TYPE type;
 	int target_id;
 };
@@ -43,10 +43,10 @@ public :
 
 	bool connect();
 	void disconnect();
+	void add_query(CObject& object, QUERY_TYPE type, int target_id);
 
-	void add_query(int id, char name[NAME_SIZE], QUERY_TYPE type, int target_id);
-
-	bool login(int id, char name[NAME_SIZE]);
+	bool login(CObject* p_object);
+	bool logout(CObject* p_object);
 
 	void set_iocp(HANDLE* p_h_iocp);
 };

@@ -32,10 +32,15 @@ void CDatabase::work() {
 
 			switch (query.type) {
 			case Q_LOGIN:
-				if (false == login(query.id, query.name)) {
+				if (false == login(query.p_object)) {
 					OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
 					over_ex->m_option = OP_LOGIN_FAIL;
-					PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.id, &over_ex->m_overlapped);
+					PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.p_object->m_id, &over_ex->m_overlapped);
+				}
+				break;
+			case Q_LOGOUT:
+				if (false == logout(query.p_object)) {
+					std::cout << "LOGOUT ERROR" << std::endl;
 				}
 				break;
 			default:
@@ -93,10 +98,9 @@ void CDatabase::disconnect() {
 	SQLFreeHandle(SQL_HANDLE_ENV, m_henv);
 }
 
-void CDatabase::add_query(int id, char name[NAME_SIZE], QUERY_TYPE type, int target_id) {
+void CDatabase::add_query(CObject& object, QUERY_TYPE type, int target_id) {
 	QUERY query;
-	query.id = id;
-	strcpy_s(query.name, name);
+	query.p_object = &object;
 	query.type = type;
 	query.target_id = target_id;
 
@@ -105,7 +109,7 @@ void CDatabase::add_query(int id, char name[NAME_SIZE], QUERY_TYPE type, int tar
 	m_q_mtx.unlock();
 }
 
-bool CDatabase::login(int id, char name[NAME_SIZE]) {
+bool CDatabase::login(CObject* p_object) {
 	SQLRETURN retcode;
 
 	SQLWCHAR nickname[NAME_SIZE];
@@ -124,7 +128,7 @@ bool CDatabase::login(int id, char name[NAME_SIZE]) {
 	WCHAR cmd[1024];
 	WCHAR wname[NAME_SIZE];
 
-	mbstowcs_s(nullptr, wname, NAME_SIZE, name, NAME_SIZE);
+	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
 	wsprintf(cmd, L"select u_Nickname, u_Visual, u_Max_Hp, u_Hp, u_Level, u_Exp, u_X, u_Y, u_Potion_S, u_Potion_L from user_table where u_Id = '%s'", wname);
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
@@ -172,7 +176,7 @@ bool CDatabase::login(int id, char name[NAME_SIZE]) {
 			OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
 			over_ex->m_option = OP_LOGIN_OK;
 			over_ex->m_data = reinterpret_cast<long long>(info);
-			PostQueuedCompletionStatus(*m_p_h_iocp, 1, id, &over_ex->m_overlapped);
+			PostQueuedCompletionStatus(*m_p_h_iocp, 1, p_object->m_id, &over_ex->m_overlapped);
 
 			m_s_mtx.unlock();
 			return true;
@@ -182,6 +186,35 @@ bool CDatabase::login(int id, char name[NAME_SIZE]) {
 		}
 
 		return false;
+	}
+	else {
+		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
+		m_s_mtx.unlock();
+		return false;
+	}
+}
+
+bool CDatabase::logout(CObject* p_object) {
+
+	SQLRETURN retcode;
+	SQLWCHAR szId[NAME_SIZE];
+	SQLSMALLINT dPosx, dPosy;
+	SQLLEN cbId = 0, cbPosx = 0, cbPosy = 0;
+
+	m_s_mtx.lock();
+
+	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
+
+	WCHAR cmd[200];
+	WCHAR wname[NAME_SIZE];
+
+	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
+	wsprintf(cmd, L"update user_table set u_X = %d, u_Y = %d where u_Nickname = '%s'", p_object->m_x, p_object->m_y, wname);
+	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+		//wprintf(L"Logout [%s] %d %d\n", wname, objects[c_id].x, objects[c_id].y);
+		m_s_mtx.unlock();
+		return true;
 	}
 	else {
 		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
