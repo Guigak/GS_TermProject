@@ -32,8 +32,20 @@ void CDatabase::work() {
 
 			switch (query.type) {
 			case Q_LOGIN:
-				if (login(query.p_object)) {
+			{
+				int result = login(query.p_object);
+				if (result == 0) {
 					set_ingame(query.p_object);
+				}
+				else if (result == -2) {
+					if (create_data(query.p_object)) {
+						set_ingame(query.p_object);
+					}
+					else {
+						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+						over_ex->m_option = OP_LOGIN_FAIL;
+						PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.p_object->m_id, &over_ex->m_overlapped);
+					}
 				}
 				else {
 					OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
@@ -41,6 +53,7 @@ void CDatabase::work() {
 					PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.p_object->m_id, &over_ex->m_overlapped);
 				}
 				break;
+			}
 			case Q_LOGOUT:
 				if (false == logout(query.p_object)) {
 					std::cout << "LOGOUT ERROR" << std::endl;
@@ -112,7 +125,7 @@ void CDatabase::add_query(CObject& object, QUERY_TYPE type, int target_id) {
 	m_q_mtx.unlock();
 }
 
-bool CDatabase::login(CObject* p_object) {
+int CDatabase::login(CObject* p_object) {
 	SQLRETURN retcode;
 
 	SQLWCHAR nickname[NAME_SIZE];
@@ -153,6 +166,11 @@ bool CDatabase::login(CObject* p_object) {
 		// Fetch and print each row of data. On an error, display a message and exit.  
 		retcode = SQLFetch(m_hstmt);
 
+		if (retcode == SQL_NO_DATA_FOUND) {
+			m_s_mtx.unlock();
+			return -2;
+		}
+
 		if (retcode == SQL_ERROR) {
 			std::cout << "Error" << std::endl;
 		}
@@ -163,7 +181,7 @@ bool CDatabase::login(CObject* p_object) {
 
 			if (ingame) {
 				m_s_mtx.unlock();
-				return false;
+				return -1;
 			}
 
 			PLAYER_INFO* info = new PLAYER_INFO;
@@ -191,18 +209,18 @@ bool CDatabase::login(CObject* p_object) {
 			PostQueuedCompletionStatus(*m_p_h_iocp, 1, p_object->m_id, &over_ex->m_overlapped);
 
 			m_s_mtx.unlock();
-			return true;
+			return 0;
 		}
 		else {
 			m_s_mtx.unlock();
 		}
 
-		return false;
+		return -1;
 	}
 	else {
 		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
 		m_s_mtx.unlock();
-		return false;
+		return -1;
 	}
 }
 
@@ -216,14 +234,13 @@ bool CDatabase::logout(CObject* p_object) {
 
 	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
 
-	WCHAR cmd[200];
+	WCHAR cmd[1024];
 	WCHAR wname[NAME_SIZE];
 
 	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
 	wsprintf(cmd, L"update user_table set u_X = %d, u_Y = %d, u_Ingame = 0 where u_Nickname = '%s'", p_object->m_x, p_object->m_y, wname);
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
-		//wprintf(L"Logout [%s] %d %d\n", wname, objects[c_id].x, objects[c_id].y);
 		m_s_mtx.unlock();
 		return true;
 	}
@@ -244,14 +261,57 @@ bool CDatabase::set_ingame(CObject* p_object) {
 
 	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
 
-	WCHAR cmd[200];
+	WCHAR cmd[1024];
 	WCHAR wname[NAME_SIZE];
 
 	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
 	wsprintf(cmd, L"update user_table set u_Ingame = 1 where u_Nickname = '%s'", wname);
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
-		//wprintf(L"Logout [%s] %d %d\n", wname, objects[c_id].x, objects[c_id].y);
+		m_s_mtx.unlock();
+		return true;
+	}
+	else {
+		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
+		m_s_mtx.unlock();
+		return false;
+	}
+}
+
+bool CDatabase::create_data(CObject* p_object) {
+	SQLRETURN retcode;
+	SQLWCHAR szId[NAME_SIZE];
+	SQLSMALLINT dPosx, dPosy;
+	SQLLEN cbId = 0, cbPosx = 0, cbPosy = 0;
+
+	m_s_mtx.lock();
+
+	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
+
+	WCHAR cmd[1024];
+	WCHAR wname[NAME_SIZE];
+
+	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
+	wsprintf(cmd, L"insert into user_table (u_Id, u_Nickname, u_Visual, u_Max_Hp, u_Hp, u_Level, u_Exp, u_X, u_Y, u_Potion_S, u_Potion_L, u_Ingame) values ('%s', '%s', 1, 50, 50, 1, 0, 4, 4, 0, 0, 0)", wname, wname);
+	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+		PLAYER_INFO* info = new PLAYER_INFO;
+		strcpy_s(info->nickname, p_object->m_name);
+		info->visual = 1;
+		info->max_hp = 50;
+		info->hp = 50;
+		info->level = 1;
+		info->exp = 0;
+		info->x = 4;
+		info->y = 4;
+		info->potion_s = 0;
+		info->potion_l = 0;
+
+		OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+		over_ex->m_option = OP_LOGIN_OK;
+		over_ex->m_data = reinterpret_cast<long long>(info);
+		PostQueuedCompletionStatus(*m_p_h_iocp, 1, p_object->m_id, &over_ex->m_overlapped);
+
 		m_s_mtx.unlock();
 		return true;
 	}

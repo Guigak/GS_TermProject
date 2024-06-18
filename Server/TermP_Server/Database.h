@@ -45,9 +45,11 @@ public :
 	void disconnect();
 	void add_query(CObject& object, QUERY_TYPE type, int target_id);
 
-	bool login(CObject* p_object);
+	int login(CObject* p_object);
 	bool logout(CObject* p_object);
 	bool set_ingame(CObject* p_object);
+
+	bool create_data(CObject* p_object);
 
 	void set_iocp(HANDLE* p_h_iocp);
 };
