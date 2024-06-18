@@ -33,6 +33,7 @@ public :
 
 	void teleport(CObject& object);
 	void random_move(CObject& object);
+	void send_update_around(int client_id);
 
 	void check_dead(CObject& object);
 

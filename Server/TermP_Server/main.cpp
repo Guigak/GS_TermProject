@@ -11,6 +11,7 @@ int main() {
 		std::cout << "DB Connect ERROR" << std::endl;
 		return 0;
 	}
+	g_DB.clear_Ingame();
 
 	g_NW.set_database(&g_DB);
 

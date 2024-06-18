@@ -225,9 +225,6 @@ int CDatabase::login(CObject* p_object) {
 
 bool CDatabase::logout(CObject* p_object) {
 	SQLRETURN retcode;
-	SQLWCHAR szId[NAME_SIZE];
-	SQLSMALLINT dPosx, dPosy;
-	SQLLEN cbId = 0, cbPosx = 0, cbPosy = 0;
 
 	m_s_mtx.lock();
 
@@ -252,9 +249,6 @@ bool CDatabase::logout(CObject* p_object) {
 
 bool CDatabase::set_ingame(CObject* p_object) {
 	SQLRETURN retcode;
-	SQLWCHAR szId[NAME_SIZE];
-	SQLSMALLINT dPosx, dPosy;
-	SQLLEN cbId = 0, cbPosx = 0, cbPosy = 0;
 
 	m_s_mtx.lock();
 
@@ -265,6 +259,28 @@ bool CDatabase::set_ingame(CObject* p_object) {
 
 	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
 	wsprintf(cmd, L"update user_table set u_Ingame = 1 where u_Nickname = '%s'", wname);
+	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+		m_s_mtx.unlock();
+		return true;
+	}
+	else {
+		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
+		m_s_mtx.unlock();
+		return false;
+	}
+}
+
+bool CDatabase::clear_Ingame() {
+	SQLRETURN retcode;
+
+	m_s_mtx.lock();
+
+	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
+
+	WCHAR cmd[1024];
+
+	wsprintf(cmd, L"update user_table set u_Ingame = 0");
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 		m_s_mtx.unlock();

@@ -12,11 +12,12 @@ void CSector::remove_id(int id, int x, int y) {
 }
 
 void CSector::change_sector(int id, int old_x, int old_y, int new_x, int new_y) {
-	{
+	if (new_x != -1 && new_y != -1) {
 		std::lock_guard<std::mutex> lock(m_Sectors[new_y][new_x].mtx);
 		m_Sectors[new_y][new_x].ids.insert(id);
 	}
-	{
+
+	if (old_x != -1 && old_y != -1) {
 		std::lock_guard<std::mutex> lock(m_Sectors[old_y][old_x].mtx);
 		m_Sectors[old_y][old_x].ids.erase(id);
 	}

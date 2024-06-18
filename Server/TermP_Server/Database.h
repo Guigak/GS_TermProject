@@ -48,6 +48,7 @@ public :
 	int login(CObject* p_object);
 	bool logout(CObject* p_object);
 	bool set_ingame(CObject* p_object);
+	bool clear_Ingame();
 
 	bool create_data(CObject* p_object);
 

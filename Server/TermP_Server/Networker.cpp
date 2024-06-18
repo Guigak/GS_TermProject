@@ -90,6 +90,9 @@ void CNetworker::init() {
 		sprintf_s(m_objects[i].m_name, "N%d", i);
 		m_objects[i].m_state = ST_INGAME;
 		m_objects[i].m_active = false;
+		m_objects[i].m_max_hp = 100;
+		m_objects[i].m_hp = 100;
+		m_objects[i].m_exp = 10;
 
 		auto Lua = m_objects[i].m_Lua = luaL_newstate();
 		luaL_openlibs(Lua);
@@ -187,6 +190,8 @@ void CNetworker::work() {
 			m_objects[key].m_max_hp = info->max_hp;
 			m_objects[key].m_hp = info->hp;
 			m_objects[key].m_exp = info->exp;
+			m_objects[key].m_potion_s = info->potion_s;
+			m_objects[key].m_potion_l = info->potion_l;
 
 			int new_x = m_objects[key].m_x = info->x;
 			int new_y = m_objects[key].m_y = info->y;
@@ -480,6 +485,42 @@ void CNetworker::random_move(CObject& object) {
 	}
 }
 
+void CNetworker::send_update_around(int client_id) {
+	std::unordered_set<SECTOR*> sectors_arr;
+
+	m_sectors.calculate_around_sector(m_objects[client_id].m_x, m_objects[client_id].m_y, sectors_arr);
+
+	for (auto& sector : sectors_arr) {
+		std::lock_guard<std::mutex> lock((*sector).mtx);
+
+		if ((*sector).ids.size() == 0) continue;
+
+		for (auto& id : (*sector).ids) {
+			{
+				std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+				if (ST_INGAME != m_objects[id].m_state) {
+					continue;
+				}
+			}
+
+			if (m_objects[id].m_id == client_id) {
+				continue;
+			}
+
+			if (false == m_objects[client_id].can_see(m_objects[id])) {
+				continue;
+			}
+
+			if (true == m_objects[id].is_NPC()) {
+				continue;
+			}
+
+			m_objects[id].send_stat_change_packet(m_objects[id]);
+		}
+	}
+}
+
 void CNetworker::check_dead(CObject& object) {
 	if (object.m_hp <= 0) {
 		object.m_hp = object.m_max_hp;
@@ -634,6 +675,7 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 			}
 			break;
 		}
+		m_objects[client_id].m_direction = p->direction;
 
 		if (false == m_map.can_move(new_y, new_x)) {
 			return;
@@ -826,6 +868,12 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		m_p_timer->add_event(client_id, 2000, EV_SKILL_MOVEMENT, -1);
 		break;
 	case CS_ITEM_POSTION_S:
+		if (m_objects[client_id].m_potion_s <= 0) {
+			break;
+		}
+		else {
+			m_objects[client_id].m_potion_s -= 1;
+		}
 	{
 		m_objects[client_id].heal(10);
 		
@@ -834,6 +882,13 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 	}
 	case CS_ITEM_POSTION_L:
 	{
+		if (m_objects[client_id].m_potion_l <= 0) {
+			break;
+		}
+		else {
+			m_objects[client_id].m_potion_l -= 1;
+		}
+
 		m_objects[client_id].heal(20);
 
 		m_objects[client_id].send_stat_change_packet(m_objects[client_id]);
@@ -846,6 +901,121 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 		check_dead(m_objects[client_id]);
 
 		m_objects[client_id].send_stat_change_packet(m_objects[client_id]);
+		break;
+	}
+	case CS_CHAT:
+	{
+		CS_CHAT_PACKET* p = reinterpret_cast<CS_CHAT_PACKET*>(packet);
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(m_objects[client_id].m_x, m_objects[client_id].m_y, sectors_arr);
+
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == m_objects[client_id].m_id) {
+					continue;
+				}
+
+				m_objects[id].send_chat_packet(m_objects[client_id], p->mess);
+			}
+		}
+		break;
+	}
+	case CS_ATTACK:
+	{
+		std::vector<int> ids;
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(m_objects[client_id].m_x, m_objects[client_id].m_y, sectors_arr);
+
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == client_id) {
+					continue;
+				}
+
+				if (false == m_objects[client_id].can_see(m_objects[id])) {
+					continue;
+				}
+
+				if (true == m_objects[client_id].attack(m_objects[id])) {
+					m_objects[client_id].send_attack_packet(m_objects[id], 10);
+					ids.emplace_back(id);
+				}
+			}
+		}
+
+		for (auto& id : ids) {
+			send_update_around(id);
+		}
+		break;
+	}
+	case CS_ATTACK_FORWARD:
+	{
+		std::vector<int> ids;
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(m_objects[client_id].m_x, m_objects[client_id].m_y, sectors_arr);
+
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == client_id) {
+					continue;
+				}
+
+				if (false == m_objects[client_id].can_see(m_objects[id])) {
+					continue;
+				}
+
+				if (true == m_objects[client_id].attack_forward(m_objects[id])) {
+					m_objects[client_id].send_attack_packet(m_objects[id], 20);
+					ids.emplace_back(id);
+				}
+			}
+		}
+
+		for (auto& id : ids) {
+			send_update_around(id);
+		}
 		break;
 	}
 	default:

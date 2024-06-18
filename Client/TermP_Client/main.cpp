@@ -4,6 +4,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <Windows.h>
+#include <vector>
 #include <chrono>
 using namespace std;
 
@@ -20,6 +21,10 @@ constexpr auto TILE_WIDTH = 40;
 constexpr auto WINDOW_WIDTH = CLIENT_WIDTH * TILE_WIDTH;
 constexpr auto WINDOW_HEIGHT = CLIENT_HEIGHT * TILE_WIDTH;
 
+//
+constexpr float CHATING_HEIGHT = 25.0f;
+constexpr float CHATING_WIDTH = WINDOW_WIDTH * 2 / 3;
+
 int g_left_x;
 int g_top_y;
 int g_myid;
@@ -27,6 +32,8 @@ int g_level = 1;
 int g_hp = 100;
 int g_max_hp = 100;
 int g_exp = 0;
+int g_potion_s = 0;
+int g_potion_l = 0;
 
 std::chrono::high_resolution_clock::time_point g_last_move_time;
 
@@ -39,15 +46,20 @@ private:
 
 	sf::Text m_name;
 	sf::Text m_chat;
+	sf::RectangleShape m_hp_bar;
 	chrono::system_clock::time_point m_mess_end_time;
 public:
 	sf::Sprite m_sprite;
 	int m_x, m_y;
+	int m_id;
+	int m_max_hp;
+	int m_hp;
 	char name[NAME_SIZE];
 	OBJECT(sf::Texture& t, int x, int y, int x2, int y2) {
 		m_showing = false;
 		m_sprite.setTexture(t);
 		m_sprite.setTextureRect(sf::IntRect(x, y, x2, y2));
+		m_hp_bar.setFillColor(sf::Color::Red);
 	}
 	OBJECT() {
 		m_showing = false;
@@ -88,6 +100,12 @@ public:
 			m_chat.setPosition(rx + TILE_WIDTH / 2 - size.width / 2, ry - 10);
 			g_window->draw(m_chat);
 		}
+
+		if (g_myid != m_id) {
+			m_hp_bar.setSize(sf::Vector2f((float)TILE_WIDTH * m_hp / m_max_hp, 5.0f));
+			m_hp_bar.setPosition(rx + TILE_WIDTH / 2 - TILE_WIDTH / 2, ry - 15);
+			g_window->draw(m_hp_bar);
+		}
 	}
 	void set_name(const char str[]) {
 		m_name.setFont(g_font);
@@ -111,11 +129,21 @@ unordered_map<int, OBJECT> tiles;
 sf::Texture* board;
 sf::Texture* pieces;
 
-//
+// ui
 sf::RectangleShape status_rect;
 
 sf::RectangleShape minimap_map;
 sf::RectangleShape minimap_plr;
+
+sf::RectangleShape potions_rect;
+sf::RectangleShape potion_s_rect;
+sf::RectangleShape potion_l_rect;
+
+sf::RectangleShape chating_rect;
+sf::RectangleShape chating_log_rect;
+std::vector<std::string> chat_logs;
+std::string chat_input;
+bool g_chating = false;
 
 //
 short tile_map[2000][2000]{0};
@@ -131,112 +159,11 @@ void client_initialize()
 		exit(-1);
 	}
 
-	// wall 1
-	tiles[0] = OBJECT{ *board, 0, 0, 32, 32 };
-	tiles[0].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[1] = OBJECT{ *board, 32, 0, 32, 32 };
-	tiles[1].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[2] = OBJECT{ *board, 64, 0, 32, 32 };
-	tiles[2].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[8] = OBJECT{ *board, 0, 32, 32, 32 };
-	tiles[8].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[9] = OBJECT{ *board, 32, 32, 32, 32 };
-	tiles[9].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[10] = OBJECT{ *board, 64, 32, 32, 32 };
-	tiles[10].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[16] = OBJECT{ *board, 0, 64, 32, 32 };
-	tiles[16].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[17] = OBJECT{ *board, 32, 64, 32, 32 };
-	tiles[17].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[18] = OBJECT{ *board, 64, 64, 32, 32 };
-	tiles[18].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// wall 2
-	tiles[24] = OBJECT{ *board, 0, 96, 32, 32 };
-	tiles[24].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[25] = OBJECT{ *board, 32, 96, 32, 32 };
-	tiles[25].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[26] = OBJECT{ *board, 64, 96, 32, 32 };
-	tiles[26].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[32] = OBJECT{ *board, 0, 128, 32, 32 };
-	tiles[32].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[33] = OBJECT{ *board, 32, 128, 32, 32 };
-	tiles[33].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[34] = OBJECT{ *board, 64, 128, 32, 32 };
-	tiles[34].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[40] = OBJECT{ *board, 0, 160, 32, 32 };
-	tiles[40].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[41] = OBJECT{ *board, 32, 160, 32, 32 };
-	tiles[41].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[42] = OBJECT{ *board, 64, 160, 32, 32 };
-	tiles[42].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// road
-	tiles[5] = OBJECT{ *board, 160, 0, 32, 32 };
-	tiles[5].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[6] = OBJECT{ *board, 192, 0, 32, 32 };
-	tiles[6].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[7] = OBJECT{ *board, 224, 0, 32, 32 };
-	tiles[7].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[13] = OBJECT{ *board, 160, 32, 32, 32 };
-	tiles[13].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[14] = OBJECT{ *board, 192, 32, 32, 32 };
-	tiles[14].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[15] = OBJECT{ *board, 224, 32, 32, 32 };
-	tiles[15].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[21] = OBJECT{ *board, 160, 64, 32, 32 };
-	tiles[21].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[22] = OBJECT{ *board, 192, 64, 32, 32 };
-	tiles[22].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[23] = OBJECT{ *board, 224, 64, 32, 32 };
-	tiles[23].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// wall 1
-	tiles[19] = OBJECT{ *board, 96, 64, 32, 32 };
-	tiles[19].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[20] = OBJECT{ *board, 128, 64, 32, 32 };
-	tiles[20].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[27] = OBJECT{ *board, 96, 96, 32, 32 };
-	tiles[27].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[28] = OBJECT{ *board, 128, 96, 32, 32 };
-	tiles[28].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// wall 2
-	tiles[35] = OBJECT{ *board, 96, 128, 32, 32 };
-	tiles[35].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[36] = OBJECT{ *board, 128, 128, 32, 32 };
-	tiles[36].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[43] = OBJECT{ *board, 96, 160, 32, 32 };
-	tiles[43].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[44] = OBJECT{ *board, 128, 160, 32, 32 };
-	tiles[44].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// road
-	tiles[3] = OBJECT{ *board, 96, 0, 32, 32 };
-	tiles[3].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[4] = OBJECT{ *board, 128, 0, 32, 32 };
-	tiles[4].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	tiles[11] = OBJECT{ *board, 96, 32, 32, 32 };
-	tiles[11].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	tiles[12] = OBJECT{ *board, 128, 32, 32, 32 };
-	tiles[12].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// 1
-	tiles[29] = OBJECT{ *board, 160, 96, 32, 32 };
-	tiles[29].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
-	// 2
-	tiles[30] = OBJECT{ *board, 192, 96, 32, 32 };
-	tiles[30].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
+	// map tiles
+	for (int i = 0; i < 48; ++i) {
+		tiles[i] = OBJECT{ *board, 32 * (i % 8), 32 * (i / 8), 32, 32 };
+		tiles[i].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
+	}
 
 	avatar = OBJECT{ *pieces, 128, 0, 64, 64 };
 	avatar.m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 64.f, (float)TILE_WIDTH / 64.f));
@@ -250,6 +177,22 @@ void client_initialize()
 	minimap_map.setSize(sf::Vector2f(200.0f, 200.0f));
 	minimap_plr.setFillColor(sf::Color::White);
 	minimap_plr.setSize(sf::Vector2f(MINIMAP_PLAYER_SIZE, MINIMAP_PLAYER_SIZE));
+
+	potions_rect.setFillColor(sf::Color::Black);
+	potions_rect.setSize(sf::Vector2f(100.0f, 50.0f));
+
+	potion_s_rect.setFillColor(sf::Color::White);
+	potion_s_rect.setSize(sf::Vector2f(40.0f, 40.0f));
+
+	potion_l_rect.setFillColor(sf::Color::White);
+	potion_l_rect.setSize(sf::Vector2f(40.0f, 40.0f));
+
+	//
+	chating_rect.setFillColor(sf::Color::Black);
+	chating_rect.setSize(sf::Vector2f(WINDOW_WIDTH * 2 / 3, CHATING_HEIGHT));
+
+	chating_log_rect.setFillColor(sf::Color::White);
+	chating_log_rect.setSize(sf::Vector2f(WINDOW_WIDTH * 2 / 3, CHATING_HEIGHT * 5));
 }
 
 void client_finish()
@@ -268,6 +211,7 @@ void ProcessPacket(char* ptr)
 	{
 		SC_LOGIN_INFO_PACKET* packet = reinterpret_cast<SC_LOGIN_INFO_PACKET*>(ptr);
 		g_myid = packet->id;
+		strcpy_s(avatar.name, packet->name);
 		avatar.m_x = packet->x;
 		avatar.m_y = packet->y;
 		g_left_x = packet->x - CLIENT_WIDTH / 2;
@@ -278,6 +222,8 @@ void ProcessPacket(char* ptr)
 		g_max_hp = packet->max_hp;
 		g_hp = packet->hp;
 		g_exp = packet->exp;
+		g_potion_s = packet->potion_s;
+		g_potion_l = packet->potion_l;
 
 		avatar.show();
 	}
@@ -296,6 +242,10 @@ void ProcessPacket(char* ptr)
 		}
 		else {
 			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
+			players[id].m_id = id;
+			strcpy_s(players[id].name, my_packet->name);
+			players[id].m_max_hp = my_packet->max_hp;
+			players[id].m_hp = my_packet->hp;
 			players[id].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 64.f, (float)TILE_WIDTH / 64.f));
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
@@ -334,25 +284,68 @@ void ProcessPacket(char* ptr)
 	{
 		SC_CHAT_PACKET* my_packet = reinterpret_cast<SC_CHAT_PACKET*>(ptr);
 		int other_id = my_packet->id;
-
+		 
 		if (other_id == g_myid) {
 			avatar.set_chat(my_packet->mess);
 		}
+		else if (other_id < MAX_NPC) {
+			if (players.count(other_id) != 0) {
+				players[other_id].set_chat(my_packet->mess);
+			}
+		}
 		else {
-			players[other_id].set_chat(my_packet->mess);
+			while (chat_logs.size() > 5) {
+				chat_logs.erase(chat_logs.begin());
+			}
+
+			std::string temp_chat;
+			temp_chat.append(my_packet->name).append(" : ").append(my_packet->mess);
+			chat_logs.emplace_back(temp_chat);
 		}
 		break;
 	}
 	case SC_STAT_CHANGE:
 	{
 		SC_STAT_CHANGE_PACKET* my_packet = reinterpret_cast<SC_STAT_CHANGE_PACKET*>(ptr);
-		int other_id = my_packet->id;
+		int id = my_packet->id;
 
-		if (other_id == g_myid) {
+		if (id == g_myid) {
 			g_hp = my_packet->hp;
 			g_exp = my_packet->exp;
+			g_potion_s = my_packet->potion_s;
+			g_potion_l = my_packet->potion_l;
 		}
 		else {
+			players[id].m_max_hp = my_packet->max_hp;
+			players[id].m_hp = my_packet->hp;
+		}
+
+		break;
+	}
+	case SC_ATTACK:
+	{
+		SC_ATTACK_PACKET* my_packet = reinterpret_cast<SC_ATTACK_PACKET*>(ptr);
+		int id = my_packet->id;
+		int other_id = my_packet->target_id;
+
+		if (id == g_myid) {
+			while (chat_logs.size() > 5) {
+				chat_logs.erase(chat_logs.begin());
+			}
+
+			if (my_packet->exp == 0) {
+				std::string temp_chat;
+				temp_chat.append("You attacked ").append(players[other_id].name).append(" with ").append(std::to_string(my_packet->degree)).append(" damage");
+				chat_logs.emplace_back(temp_chat);
+			}
+			else {
+				std::string temp_chat;
+				temp_chat.append("You killed ").append(players[other_id].name).append(" and got ").append(std::to_string(my_packet->exp)).append(" exp");
+				chat_logs.emplace_back(temp_chat);
+			}
+		}
+		else {
+
 		}
 
 		break;
@@ -419,6 +412,7 @@ void client_main()
 	for (auto& pl : players) pl.second.draw();
 	sf::Text text;
 	text.setFont(g_font);
+	text.setFillColor(sf::Color::White);
 	char buf[100];
 	sprintf_s(buf, "(%d, %d)", avatar.m_x, avatar.m_y);
 	text.setString(buf);
@@ -457,6 +451,69 @@ void client_main()
 
 	minimap_plr.setPosition(offset_width + MINIMAP_WIDTH / W_WIDTH * avatar.m_x - MINIMAP_PLAYER_SIZE / 2.0f, MINIMAP_HEIGHT / W_WIDTH * avatar.m_y - MINIMAP_PLAYER_SIZE / 2.0f);
 	g_window->draw(minimap_plr);
+
+	// potion
+	potions_rect.setPosition(WINDOW_WIDTH - 100.0f, WINDOW_HEIGHT - 50.0f);
+	g_window->draw(potions_rect);
+
+	potion_s_rect.setPosition(WINDOW_WIDTH - 95.0f, WINDOW_HEIGHT - 45.0f);
+	g_window->draw(potion_s_rect);
+
+	potion_l_rect.setPosition(WINDOW_WIDTH -45.0f, WINDOW_HEIGHT - 45.0f);
+	g_window->draw(potion_l_rect);
+
+	sprintf_s(buf, "%d", g_potion_s);
+	text.setString(buf);
+	text.setFillColor(sf::Color::Black);
+	size = text.getGlobalBounds();
+	text.setPosition((float)WINDOW_WIDTH - 75.0f - size.width / 2.0f, (float)WINDOW_HEIGHT - 25.0f - size.height);
+	g_window->draw(text);
+
+	sprintf_s(buf, "%d", g_potion_l);
+	text.setString(buf);
+	size = text.getGlobalBounds();
+	text.setPosition((float)WINDOW_WIDTH - 25.0f - size.width / 2.0f, (float)WINDOW_HEIGHT - 25.0f - size.height);
+	g_window->draw(text);
+
+	// chating
+	chating_rect.setPosition(0, WINDOW_HEIGHT - CHATING_HEIGHT);
+	g_window->draw(chating_rect);
+
+	if (g_chating) {
+		chating_log_rect.setPosition(0, WINDOW_HEIGHT - CHATING_HEIGHT * 6);
+		g_window->draw(chating_log_rect);
+	}
+
+	while (chat_logs.size() > 5) {
+		chat_logs.erase(chat_logs.begin());
+	}
+
+	sf::Text chat_text;
+	chat_text.setFont(g_font);
+	chat_text.setScale(0.5f, 0.5f);
+	chat_text.setFillColor(sf::Color::White);
+
+	if (g_chating) {
+		int count = 1;
+
+		chat_text.setString(chat_input);
+		chat_text.setPosition(0, WINDOW_HEIGHT - CHATING_HEIGHT * count++);
+		g_window->draw(chat_text);
+
+		chat_text.setFillColor(sf::Color::Black);
+		for (auto p = chat_logs.rbegin(); p != chat_logs.rend(); ++p) {
+			chat_text.setString(*p);
+			chat_text.setPosition(0, WINDOW_HEIGHT - CHATING_HEIGHT * count++);
+			g_window->draw(chat_text);
+		}
+	}
+	else {
+		if (false == chat_logs.empty()) {
+			chat_text.setString(chat_logs.back());
+			chat_text.setPosition(0, WINDOW_HEIGHT - CHATING_HEIGHT);
+			g_window->draw(chat_text);
+		}
+	}
 }
 
 void send_packet(void* packet)
@@ -526,84 +583,126 @@ int main()
 		{
 			if (event.type == sf::Event::Closed)
 				window.close();
-			if (event.type == sf::Event::KeyPressed) {
-				int direction = -1;
-				switch (event.key.code) {
-				case sf::Keyboard::Left:
-					direction = 2;
-					break;
-				case sf::Keyboard::Right:
-					direction = 3;
-					break;
-				case sf::Keyboard::Up:
-					direction = 0;
-					break;
-				case sf::Keyboard::Down:
-					direction = 1;
-					break;
-				case sf::Keyboard::Escape:
-					window.close();
-					break;
-				//
-				case sf::Keyboard::T:
-				{
-					CS_TELEPORT_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_TELEPORT;
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::A:
-				{
-					CS_ATTACK_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ATTACK;
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::F:
-				{
-					CS_SKILL_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_SKILL_MOVEMENT;
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::Num1:
-				{
-					CS_ITEM_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ITEM_POSTION_S;
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::Num2:
-				{
-					CS_ITEM_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ITEM_POSTION_L;
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::Num3:
-				{
-					CS_ITEM_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ITEM_POISION;
-					send_packet(&p);
-					break;
-				}
-				}
-				if (-1 != direction) {
-					CS_MOVE_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_MOVE;
-					p.direction = direction;
-					g_last_move_time = std::chrono::high_resolution_clock::now();
-					p.move_time = static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(g_last_move_time.time_since_epoch()).count());
-					send_packet(&p);
-				}
 
+			if (false == g_chating) {
+				if (event.type == sf::Event::KeyPressed) {
+					int direction = -1;
+					switch (event.key.code) {
+					case sf::Keyboard::Left:
+						direction = 2;
+						break;
+					case sf::Keyboard::Right:
+						direction = 3;
+						break;
+					case sf::Keyboard::Up:
+						direction = 0;
+						break;
+					case sf::Keyboard::Down:
+						direction = 1;
+						break;
+					case sf::Keyboard::Escape:
+						window.close();
+						break;
+						//
+					case sf::Keyboard::T:
+					{
+						CS_TELEPORT_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_TELEPORT;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::A:
+					{
+						CS_ATTACK_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ATTACK;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::S:
+					{
+						CS_ATTACK_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ATTACK_FORWARD;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::F:
+					{
+						CS_SKILL_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_SKILL_MOVEMENT;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::Num1:
+					{
+						CS_ITEM_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ITEM_POSTION_S;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::Num2:
+					{
+						CS_ITEM_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ITEM_POSTION_L;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::Num3:
+					{
+						CS_ITEM_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ITEM_POISION;
+						send_packet(&p);
+						break;
+					}
+					case sf::Keyboard::Enter:
+						g_chating = true;
+						break;
+					}
+					if (-1 != direction) {
+						CS_MOVE_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_MOVE;
+						p.direction = direction;
+						g_last_move_time = std::chrono::high_resolution_clock::now();
+						p.move_time = static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(g_last_move_time.time_since_epoch()).count());
+						send_packet(&p);
+					}
+				}
+			}
+			else {
+				if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Enter) {
+					if (false == chat_input.empty()) {
+						CS_CHAT_PACKET p;
+						p.size = sizeof(CS_CHAT_PACKET);
+						p.type = CS_CHAT;
+						strcpy_s(p.mess, chat_input.c_str());
+						send_packet(&p);
+
+						std::string temp_chat;
+						temp_chat.append(avatar.name).append(" : ").append(chat_input);
+						chat_logs.emplace_back(temp_chat);
+						chat_input.clear();
+					}
+
+					g_chating = false;
+				}
+			}
+
+			if (g_chating && event.type == sf::Event::TextEntered) {
+				if (event.text.unicode == '\b') {
+					if (false == chat_input.empty()) {
+						chat_input.pop_back();
+					}
+				}
+				else if (event.text.unicode < 128 && event.text.unicode != '\r') {
+					chat_input += (char)(event.text.unicode);
+				}
 			}
 		}
 

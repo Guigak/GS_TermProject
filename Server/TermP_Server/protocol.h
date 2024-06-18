@@ -45,6 +45,10 @@ constexpr char SC_MOVE_OBJECT = 6;
 constexpr char SC_CHAT = 7;
 constexpr char SC_STAT_CHANGE = 8;
 
+// add
+constexpr char SC_DAMAGED = 9;
+constexpr char SC_ATTACK = 10;
+
 #pragma pack (push, 1)
 struct CS_LOGIN_PACKET {
 	unsigned short size;
@@ -122,6 +126,9 @@ struct SC_CHAT_PACKET {
 	unsigned short size;
 	char	type;
 	int		id;
+	// add
+	char	name[NAME_SIZE];
+
 	char	mess[CHAT_SIZE];
 };
 
@@ -158,6 +165,15 @@ struct CS_SKILL_PACKET {
 struct CS_ITEM_PACKET {
 	unsigned short size;
 	char	type;
+};
+
+struct SC_ATTACK_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		target_id;
+	int		degree;
+	int		exp;
 };
 
 

@@ -29,6 +29,13 @@ public :
 	int m_hp;
 	int m_exp;
 
+	//
+	int m_potion_s;
+	int m_potion_l;
+
+	//
+	int m_direction = 0;	// 0 : UP, 1 : DOWN, 2 : LEFT, 3 : RIGHT
+
 	bool m_skill_mv;
 
 	std::atomic_bool m_active;
@@ -51,6 +58,7 @@ public :
 	void send_add_object_packet(CObject& object);
 	void send_remove_object_packet(CObject& object);
 	void send_stat_change_packet(CObject& objcet);
+	void send_attack_packet(CObject& object, int degree);
 
 	void send_move_packet(CObject& object);
 
@@ -61,5 +69,10 @@ public :
 	bool can_see(CObject& object);
 
 	void heal(int degree);
+	int damaged(int degree);
+
+	//
+	bool attack(CObject& object);
+	bool attack_forward(CObject& object);
 };
 
