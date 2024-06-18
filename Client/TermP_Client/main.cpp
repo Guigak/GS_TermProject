@@ -7,10 +7,6 @@
 #include <chrono>
 using namespace std;
 
-//#pragma comment (lib, "opengl32.lib")
-//#pragma comment (lib, "winmm.lib")
-//#pragma comment (lib, "ws2_32.lib")
-
 #include "../../Server/TermP_Server/protocol.h"
 
 sf::TcpSocket s_socket;
@@ -21,7 +17,7 @@ constexpr float MINIMAP_HEIGHT = 200.0f;
 constexpr float MINIMAP_PLAYER_SIZE = 5.0f;
 
 constexpr auto TILE_WIDTH = 40;
-constexpr auto WINDOW_WIDTH = CLIENT_WIDTH * TILE_WIDTH;   // size of window
+constexpr auto WINDOW_WIDTH = CLIENT_WIDTH * TILE_WIDTH;
 constexpr auto WINDOW_HEIGHT = CLIENT_HEIGHT * TILE_WIDTH;
 
 int g_left_x;
@@ -31,6 +27,8 @@ int g_level = 1;
 int g_hp = 100;
 int g_max_hp = 100;
 int g_exp = 0;
+
+std::chrono::high_resolution_clock::time_point g_last_move_time;
 
 sf::RenderWindow* g_window;
 sf::Font g_font;
@@ -110,9 +108,6 @@ OBJECT avatar;
 unordered_map<int, OBJECT> players;
 unordered_map<int, OBJECT> tiles;
 
-OBJECT white_tile;
-OBJECT black_tile;
-
 sf::Texture* board;
 sf::Texture* pieces;
 
@@ -129,7 +124,6 @@ void client_initialize()
 {
 	board = new sf::Texture;
 	pieces = new sf::Texture;
-	//board->loadFromFile("chessmap.bmp");
 	board->loadFromFile("map.png");
 	pieces->loadFromFile("chess2.png");
 	if (false == g_font.loadFromFile("cour.ttf")) {
@@ -244,11 +238,6 @@ void client_initialize()
 	tiles[30] = OBJECT{ *board, 192, 96, 32, 32 };
 	tiles[30].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
 
-	white_tile = OBJECT{ *board, 32, 160, 32, 32 };
-	white_tile.m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-	black_tile = OBJECT{ *board, 32, 160, 32, 32 };
-	black_tile.m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 32.f, (float)TILE_WIDTH / 32.f));
-
 	avatar = OBJECT{ *pieces, 128, 0, 64, 64 };
 	avatar.m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 64.f, (float)TILE_WIDTH / 64.f));
 	avatar.move(4, 4);
@@ -285,10 +274,6 @@ void ProcessPacket(char* ptr)
 		g_top_y = packet->y - CLIENT_HEIGHT / 2;
 		avatar.set_name(packet->name);
 
-		//while (packet->name[strlen(packet->name) - 1] == ' ') {
-		//	packet->name[strlen(packet->name) - 1] = packet->name[strlen(packet->name)];
-		//}
-
 		g_level = packet->level;
 		g_max_hp = packet->max_hp;
 		g_hp = packet->hp;
@@ -309,18 +294,13 @@ void ProcessPacket(char* ptr)
 			g_top_y = my_packet->y - CLIENT_HEIGHT / 2;
 			avatar.show();
 		}
-		else /*if (id < MAX_USER)*/ {
+		else {
 			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
 			players[id].m_sprite.setScale(sf::Vector2f((float)TILE_WIDTH / 64.f, (float)TILE_WIDTH / 64.f));
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].show();
 		}
-		//else {
-		//	//npc[id - NPC_START].x = my_packet->x;
-		//	//npc[id - NPC_START].y = my_packet->y;
-		//	//npc[id - NPC_START].attr |= BOB_ATTR_VISIBLE;
-		//}
 		break;
 	}
 	case SC_MOVE_OBJECT:
@@ -332,13 +312,9 @@ void ProcessPacket(char* ptr)
 			g_left_x = my_packet->x - CLIENT_WIDTH / 2;
 			g_top_y = my_packet->y - CLIENT_HEIGHT / 2;
 		}
-		else /*if (other_id < MAX_USER)*/ {
+		else {
 			players[other_id].move(my_packet->x, my_packet->y);
 		}
-		//else {
-		//	//npc[other_id - NPC_START].x = my_packet->x;
-		//	//npc[other_id - NPC_START].y = my_packet->y;
-		//}
 		break;
 	}
 
@@ -349,12 +325,9 @@ void ProcessPacket(char* ptr)
 		if (other_id == g_myid) {
 			avatar.hide();
 		}
-		else /*if (other_id < MAX_USER)*/ {
+		else {
 			players.erase(other_id);
 		}
-		//else {
-		//	//		npc[other_id - NPC_START].attr &= ~BOB_ATTR_VISIBLE;
-		//}
 		break;
 	}
 	case SC_CHAT:
@@ -368,6 +341,20 @@ void ProcessPacket(char* ptr)
 		else {
 			players[other_id].set_chat(my_packet->mess);
 		}
+		break;
+	}
+	case SC_STAT_CHANGE:
+	{
+		SC_STAT_CHANGE_PACKET* my_packet = reinterpret_cast<SC_STAT_CHANGE_PACKET*>(ptr);
+		int other_id = my_packet->id;
+
+		if (other_id == g_myid) {
+			g_hp = my_packet->hp;
+			g_exp = my_packet->exp;
+		}
+		else {
+		}
+
 		break;
 	}
 	default:
@@ -427,16 +414,6 @@ void client_main()
 
 			tiles[tile_map[tile_y][tile_x]].a_move(TILE_WIDTH * i, TILE_WIDTH * j);
 			tiles[tile_map[tile_y][tile_x]].a_draw();
-
-			//if (0 == (tile_x / 3 + tile_y / 3) % 2) {
-			//	white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-			//	white_tile.a_draw();
-			//}
-			//else
-			//{
-			//	black_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-			//	black_tile.a_draw();
-			//}
 		}
 	avatar.draw();
 	for (auto& pl : players) pl.second.draw();
@@ -507,40 +484,18 @@ int main()
 		for (int j = 0; j < 2000; ++j) {
 			ifile >> num;
 			tile_map[i][j] = num;
-
-			//if (num >= 48) {
-			//	tile_map[j][i] = 29;
-			//}
-			//else { 
-			//	tile_map[j][i] = num;
-			//}
 		}
 	}
 
 	ifile.close();
 
 	//
-	//std::cout << "re-writing.." << std::endl;
+	sf::IpAddress addr = "127.0.0.1";
+	std::cout << "Server IP : ";
+	std::cin >> addr;
 
-	//std::ofstream ofile("map_2000_edit.txt");
-
-	//if (!ofile.is_open()) {
-	//	std::cout << "map write fail" << std::endl;
-	//	exit(0);
-	//}
-
-	//for (int i = 0; i < 2000; ++i) {
-	//	for (int j = 0; j < 2000; ++j) {
-	//		ofile << tile_map[j][i];
-	//		ofile << " ";
-	//	}
-	//}
-
-	//ofile.close();
-
-	//
 	wcout.imbue(locale("korean"));
-	sf::Socket::Status status = s_socket.connect("127.0.0.1", PORT_NUM);
+	sf::Socket::Status status = s_socket.connect(addr, PORT_NUM);
 	s_socket.setBlocking(false);
 
 	if (status != sf::Socket::Done) {
@@ -553,13 +508,10 @@ int main()
 	p.size = sizeof(p);
 	p.type = CS_LOGIN;
 
-	//string player_name{ "P" };
-	//player_name += to_string(GetCurrentProcessId());
 	char player_name[NAME_SIZE];
 	std::cout << "ID : ";
 	std::cin >> player_name;
 
-	//strcpy_s(p.name, player_name.c_str());
 	strcpy_s(p.name, player_name);
 	send_packet(&p);
 	avatar.set_name(p.name);
@@ -594,17 +546,61 @@ int main()
 					break;
 				//
 				case sf::Keyboard::T:
+				{
 					CS_TELEPORT_PACKET p;
 					p.size = sizeof(p);
 					p.type = CS_TELEPORT;
 					send_packet(&p);
 					break;
 				}
+				case sf::Keyboard::A:
+				{
+					CS_ATTACK_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ATTACK;
+					send_packet(&p);
+					break;
+				}
+				case sf::Keyboard::F:
+				{
+					CS_SKILL_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_SKILL_MOVEMENT;
+					send_packet(&p);
+					break;
+				}
+				case sf::Keyboard::Num1:
+				{
+					CS_ITEM_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ITEM_POSTION_S;
+					send_packet(&p);
+					break;
+				}
+				case sf::Keyboard::Num2:
+				{
+					CS_ITEM_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ITEM_POSTION_L;
+					send_packet(&p);
+					break;
+				}
+				case sf::Keyboard::Num3:
+				{
+					CS_ITEM_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ITEM_POISION;
+					send_packet(&p);
+					break;
+				}
+				}
 				if (-1 != direction) {
 					CS_MOVE_PACKET p;
 					p.size = sizeof(p);
 					p.type = CS_MOVE;
 					p.direction = direction;
+					g_last_move_time = std::chrono::high_resolution_clock::now();
+					p.move_time = static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(g_last_move_time.time_since_epoch()).count());
 					send_packet(&p);
 				}
 

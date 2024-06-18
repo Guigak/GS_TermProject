@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <queue>
+#include <random>
 #include <unordered_set>;
 
 // Socket
@@ -29,7 +30,7 @@
 
 // Class
 enum OVERLAPPED_OPTION {
-	OP_ACCEPT, OP_RECV, OP_SEND, OP_RANDOM_MOVE, OP_NPC_MOVE, OP_LOGIN_OK, OP_LOGIN_FAIL
+	OP_ACCEPT, OP_RECV, OP_SEND, OP_RANDOM_MOVE, OP_NPC_MOVE, OP_LOGIN_OK, OP_LOGIN_FAIL, OP_SKILL_MOVEMENT
 };
 
 class OVERLAPPED_EX {

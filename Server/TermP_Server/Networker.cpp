@@ -2,6 +2,10 @@
 
 std::array<CObject, MAX_NPC + MAX_USER> m_objects;
 
+// random
+std::random_device rd;
+std::uniform_int_distribution<int> uid(0, WORLD_WIDTH - 1);
+
 // lua
 int API_get_x(lua_State* L)
 {
@@ -121,7 +125,6 @@ void CNetworker::work() {
 				std::cout << "Accept Error";
 			}
 			else {
-				std::cout << "GQCS Error on client[" << key << "]\n";
 				disconnect(static_cast<int>(key));
 
 				if (over_ex->m_option == OP_SEND) {
@@ -160,6 +163,8 @@ void CNetworker::work() {
 				m_objects[client_id].m_name[0] = 0;
 				m_objects[client_id].m_remain_size = 0;
 				m_objects[client_id].m_socket = m_c_socket;
+				m_objects[client_id].m_skill_mv = false;
+				m_objects[client_id].m_last_move_time = 0;
 				CreateIoCompletionPort(reinterpret_cast<HANDLE>(m_c_socket), m_h_iocp, client_id, 0);
 				m_objects[client_id].recv();
 				m_c_socket = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
@@ -312,6 +317,9 @@ void CNetworker::work() {
 			delete over_ex;
 		}
 			break;
+		case OP_SKILL_MOVEMENT:
+			m_objects[key].m_skill_mv = false;
+			break;
 		default:
 			break;
 		}
@@ -324,12 +332,12 @@ void CNetworker::clear() {
 }
 
 void CNetworker::teleport(CObject& object) {
-	int new_x = rand() % WORLD_WIDTH;
-	int new_y = rand() % WORLD_HEIGHT;
+	int new_x = uid(rd) % WORLD_WIDTH;
+	int new_y = uid(rd) % WORLD_HEIGHT;
 
 	while (false == m_map.can_move(new_x, new_y)) {
-		new_x = rand() % WORLD_WIDTH;
-		new_y = rand() % WORLD_HEIGHT;
+		new_x = uid(rd) % WORLD_WIDTH;
+		new_y = uid(rd) % WORLD_HEIGHT;
 	}
 
 	object.m_x = new_x;
@@ -377,28 +385,33 @@ void CNetworker::random_move(CObject& object) {
 	}
 
 	// move
-	switch (rand() % 4) {
-	case 0:
-		if (new_y > 0) {
-			new_y--;
+	do {
+		new_x = object.m_x;
+		new_y = object.m_y;
+
+		switch (uid(rd) % 4) {
+		case 0:
+			if (new_y > 0) {
+				new_y--;
+			}
+			break;
+		case 1:
+			if (new_y < W_HEIGHT - 1) {
+				new_y++;
+			}
+			break;
+		case 2:
+			if (new_x > 0) {
+				new_x--;
+			}
+			break;
+		case 3:
+			if (new_x < W_WIDTH - 1) {
+				new_x++;
+			}
+			break;
 		}
-		break;
-	case 1:
-		if (new_y < W_HEIGHT - 1) {
-			new_y++;
-		}
-		break;
-	case 2:
-		if (new_x > 0) {
-			new_x--;
-		}
-		break;
-	case 3:
-		if (new_x < W_WIDTH - 1) {
-			new_x++;
-		}
-		break;
-	}
+	} while (false == m_map.can_move(new_x, new_y));
 
 	object.m_x = new_x;
 	object.m_y = new_y;
@@ -467,6 +480,100 @@ void CNetworker::random_move(CObject& object) {
 	}
 }
 
+void CNetworker::check_dead(CObject& object) {
+	if (object.m_hp <= 0) {
+		object.m_hp = object.m_max_hp;
+		object.m_exp /= 2;
+		object.m_x = 4;
+		object.m_y = 4;
+
+		// Sector
+		int old_sector_x = object.m_sector_x;
+		int old_sector_y = object.m_sector_y;
+
+		int new_sector_x = object.m_x / SECTOR_WIDTH;
+		int new_sector_y = object.m_y / SECTOR_HEIGHT;
+
+		if (old_sector_x != new_sector_x || old_sector_y != new_sector_y) {
+			m_sectors.change_sector(object.m_id, old_sector_x, old_sector_y, new_sector_x, new_sector_y);
+		}
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(object.m_x, object.m_y, sectors_arr);
+
+		// view list
+		std::unordered_set<int> new_view_list;
+		object.m_vl_lock.lock();
+		std::unordered_set<int> old_view_list = object.m_view_list;
+		object.m_vl_lock.unlock();
+
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == object.m_id) {
+					continue;
+				}
+
+				if (false == object.can_see(m_objects[id])) {
+					continue;
+				}
+
+				new_view_list.insert(id);
+
+				//
+				if (true == m_objects[id].is_NPC()) {
+					if (m_objects[id].m_active == false) {
+						bool old_active = false;
+						bool new_active = true;
+
+						if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+							m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+						}
+					}
+					else {
+						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+						over_ex->m_option = OP_NPC_MOVE;
+						over_ex->m_target_id = object.m_id;
+						PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+					}
+				}
+			}
+		}
+
+		// send
+		object.send_move_packet(object);
+
+		for (int player_id : new_view_list) {
+			if (0 == old_view_list.count(player_id)) {
+				object.send_add_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_add_object_packet(object);
+			}
+			else {
+				m_objects[player_id].send_move_packet(object);
+			}
+		}
+
+		for (int player_id : old_view_list) {
+			if (0 == new_view_list.count(player_id)) {
+				object.send_remove_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_remove_object_packet(object);
+			}
+		}
+	}
+}
+
 int CNetworker::get_new_client_id() {
 	for (int i = MAX_NPC; i < MAX_NPC + MAX_USER; ++i) {
 		std::lock_guard<std::mutex> lock(m_objects[i].m_s_lock);
@@ -492,7 +599,15 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 	case CS_MOVE:
 	{
 		CS_MOVE_PACKET* p = reinterpret_cast<CS_MOVE_PACKET*>(packet);
+
+		if (false == m_objects[client_id].m_skill_mv) {
+			if (m_objects[client_id].m_last_move_time + 1000 > p->move_time) {
+				return;
+			}
+		}
+
 		m_objects[client_id].m_last_move_time = p->move_time;
+
 		short new_x = m_objects[client_id].m_x;
 		short new_y = m_objects[client_id].m_y;
 
@@ -703,6 +818,34 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 			}
 		}
 
+		break;
+	}
+	case CS_SKILL_MOVEMENT:
+		m_objects[client_id].m_skill_mv = true;
+
+		m_p_timer->add_event(client_id, 2000, EV_SKILL_MOVEMENT, -1);
+		break;
+	case CS_ITEM_POSTION_S:
+	{
+		m_objects[client_id].heal(10);
+		
+		m_objects[client_id].send_stat_change_packet(m_objects[client_id]);
+		break;
+	}
+	case CS_ITEM_POSTION_L:
+	{
+		m_objects[client_id].heal(20);
+
+		m_objects[client_id].send_stat_change_packet(m_objects[client_id]);
+		break;
+	}
+	case CS_ITEM_POISION:
+	{
+		m_objects[client_id].heal(-10);
+
+		check_dead(m_objects[client_id]);
+
+		m_objects[client_id].send_stat_change_packet(m_objects[client_id]);
 		break;
 	}
 	default:

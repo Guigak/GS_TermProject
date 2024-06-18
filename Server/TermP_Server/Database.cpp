@@ -177,7 +177,6 @@ int CDatabase::login(CObject* p_object) {
 
 		if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO)
 		{
-			wprintf(L"%20s %6d %6d %6d %6d %6d %6d %6d %6d %6d %6d", nickname, visual, max_hp, hp, level, exp, x, y, potion_s, potion_l, ingame);
 
 			if (ingame) {
 				m_s_mtx.unlock();

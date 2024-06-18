@@ -2,7 +2,7 @@
 #include "common.h"
 
 enum EVENT_TYPE {
-	EV_RANDOM_MOVE
+	EV_RANDOM_MOVE, EV_SKILL_MOVEMENT
 };
 
 struct EVENT {

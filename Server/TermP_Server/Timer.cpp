@@ -27,6 +27,13 @@ void CTimer::work() {
 					PostQueuedCompletionStatus(*m_p_h_iocp, 1, event.id, &over_ex->m_overlapped);
 				}
 				break;
+				case EV_SKILL_MOVEMENT:
+				{
+					OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+					over_ex->m_option = OP_SKILL_MOVEMENT;
+					PostQueuedCompletionStatus(*m_p_h_iocp, 1, event.id, &over_ex->m_overlapped);
+				}
+					break;
 				default:
 					break;
 				}

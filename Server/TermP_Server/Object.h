@@ -29,6 +29,8 @@ public :
 	int m_hp;
 	int m_exp;
 
+	bool m_skill_mv;
+
 	std::atomic_bool m_active;
 
 	// Lua
@@ -48,6 +50,7 @@ public :
 	
 	void send_add_object_packet(CObject& object);
 	void send_remove_object_packet(CObject& object);
+	void send_stat_change_packet(CObject& objcet);
 
 	void send_move_packet(CObject& object);
 
@@ -56,5 +59,7 @@ public :
 	//
 	bool is_NPC() { return m_id < MAX_NPC; }
 	bool can_see(CObject& object);
+
+	void heal(int degree);
 };
 

@@ -34,6 +34,8 @@ public :
 	void teleport(CObject& object);
 	void random_move(CObject& object);
 
+	void check_dead(CObject& object);
+
 	int get_new_client_id();
 	void prcs_packet(int client_id, char* packet);
 	void disconnect(int client_id);

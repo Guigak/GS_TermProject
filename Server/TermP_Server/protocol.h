@@ -2,8 +2,8 @@ constexpr int PORT_NUM = 4000;
 constexpr int NAME_SIZE = 20;
 constexpr int CHAT_SIZE = 300;
 
-constexpr int MAX_USER = 1000;
-constexpr int MAX_NPC = 2000;
+constexpr int MAX_USER = 10000;
+constexpr int MAX_NPC = 200000;
 
 constexpr int W_WIDTH = 2000;
 constexpr int W_HEIGHT = 2000;
@@ -15,6 +15,8 @@ constexpr int VIEW_RANGE = 15;
 
 constexpr int WORLD_WIDTH = 2000;
 constexpr int WORLD_HEIGHT = 2000;
+
+// add
 constexpr int CLIENT_WIDTH = 20;
 constexpr int CLIENT_HEIGHT = 20;
 constexpr int SECTOR_WIDTH = 40;
@@ -27,6 +29,13 @@ constexpr char CS_CHAT = 2;
 constexpr char CS_ATTACK = 3;			// 4 방향 공격
 constexpr char CS_TELEPORT = 4;			// RANDOM한 위치로 Teleport, Stress Test할 때 Hot Spot현상을 피하기 위해 구현
 constexpr char CS_LOGOUT = 5;			// 클라이언트에서 정상적으로 접속을 종료하는 패킷
+
+// add
+constexpr char CS_ATTACK_FORWARD = 6;
+constexpr char CS_SKILL_MOVEMENT = 7;
+constexpr char CS_ITEM_POSTION_S = 8;
+constexpr char CS_ITEM_POSTION_L = 9;
+constexpr char CS_ITEM_POISION = 10;
 
 constexpr char SC_LOGIN_INFO = 2;
 constexpr char SC_LOGIN_FAIL = 3;
@@ -129,8 +138,27 @@ struct SC_STAT_CHANGE_PACKET {
 	int		exp;
 	int		level;
 	// add
+	int		id;
+
 	int		potion_s;
 	int		potion_l;
 };
+
+// add
+struct CS_ATTACK_PACKET {
+	unsigned short size;
+	char	type;
+};
+
+struct CS_SKILL_PACKET {
+	unsigned short size;
+	char	type;
+};
+
+struct CS_ITEM_PACKET {
+	unsigned short size;
+	char	type;
+};
+
 
 #pragma pack (pop)

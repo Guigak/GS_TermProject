@@ -88,6 +88,20 @@ void CObject::send_remove_object_packet(CObject& object) {
 	send(&packet);
 }
 
+void CObject::send_stat_change_packet(CObject& objcet) {
+	if (true == is_NPC()) {
+		return;
+	}
+
+	SC_STAT_CHANGE_PACKET packet;
+	packet.id = objcet.m_id;
+	packet.size = sizeof(SC_STAT_CHANGE_PACKET);
+	packet.type = SC_STAT_CHANGE;
+	packet.hp = objcet.m_hp;
+	packet.exp = objcet.m_exp;
+	send(&packet);
+}
+
 void CObject::send_move_packet(CObject& object) {
 	if (true == is_NPC()) {
 		return;
@@ -117,7 +131,6 @@ void CObject::send_chat_packet(CObject& object, const char* message) {
 }
 
 bool CObject::can_see(CObject& object) {
-	//int dist = (object.m_x - m_x) * (object.m_x - m_x) + (object.m_y - m_y) * (object.m_y - m_y);
 
 	if (std::abs(object.m_x - m_x) > VIEW_RANGE / 2) {
 		return false;
@@ -127,7 +140,10 @@ bool CObject::can_see(CObject& object) {
 		return false;
 	}
 
-	//return dist <= VIEW_RANGE * VIEW_RANGE;
-
 	return true;
+}
+
+void CObject::heal(int degree) {
+	m_hp += degree;
+	m_hp = m_hp > m_max_hp ? m_max_hp : m_hp;
 }
