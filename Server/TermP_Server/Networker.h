@@ -31,6 +31,7 @@ public :
 	void work();
 	void clear();
 
+	void teleport(CObject& object);
 	void random_move(CObject& object);
 
 	int get_new_client_id();

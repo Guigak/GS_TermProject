@@ -47,6 +47,7 @@ public :
 
 	bool login(CObject* p_object);
 	bool logout(CObject* p_object);
+	bool set_ingame(CObject* p_object);
 
 	void set_iocp(HANDLE* p_h_iocp);
 };

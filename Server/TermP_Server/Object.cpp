@@ -117,7 +117,17 @@ void CObject::send_chat_packet(CObject& object, const char* message) {
 }
 
 bool CObject::can_see(CObject& object) {
-	int dist = (object.m_x - m_x) * (object.m_x - m_x) + (object.m_y - m_y) * (object.m_y - m_y);
+	//int dist = (object.m_x - m_x) * (object.m_x - m_x) + (object.m_y - m_y) * (object.m_y - m_y);
 
-	return dist <= VIEW_RANGE * VIEW_RANGE;
+	if (std::abs(object.m_x - m_x) > VIEW_RANGE / 2) {
+		return false;
+	}
+
+	if (std::abs(object.m_y - m_y) > VIEW_RANGE / 2) {
+		return false;
+	}
+
+	//return dist <= VIEW_RANGE * VIEW_RANGE;
+
+	return true;
 }

@@ -32,7 +32,10 @@ void CDatabase::work() {
 
 			switch (query.type) {
 			case Q_LOGIN:
-				if (false == login(query.p_object)) {
+				if (login(query.p_object)) {
+					set_ingame(query.p_object);
+				}
+				else {
 					OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
 					over_ex->m_option = OP_LOGIN_FAIL;
 					PostQueuedCompletionStatus(*m_p_h_iocp, 1, query.p_object->m_id, &over_ex->m_overlapped);
@@ -114,8 +117,9 @@ bool CDatabase::login(CObject* p_object) {
 
 	SQLWCHAR nickname[NAME_SIZE];
 	SQLSMALLINT visual, max_hp, hp, level, exp, x, y, potion_s, potion_l;
+	SQLCHAR ingame;
 
-	SQLLEN l_nickname, l_visual, l_max_hp, l_hp, l_level, l_exp, l_x, l_y, l_potion_s, l_potion_l;
+	SQLLEN l_nickname, l_visual, l_max_hp, l_hp, l_level, l_exp, l_x, l_y, l_potion_s, l_potion_l, l_ingame;
 
 	SQLWCHAR szId[NAME_SIZE];
 	SQLSMALLINT dPosx, dPosy;
@@ -129,7 +133,7 @@ bool CDatabase::login(CObject* p_object) {
 	WCHAR wname[NAME_SIZE];
 
 	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
-	wsprintf(cmd, L"select u_Nickname, u_Visual, u_Max_Hp, u_Hp, u_Level, u_Exp, u_X, u_Y, u_Potion_S, u_Potion_L from user_table where u_Id = '%s'", wname);
+	wsprintf(cmd, L"select u_Nickname, u_Visual, u_Max_Hp, u_Hp, u_Level, u_Exp, u_X, u_Y, u_Potion_S, u_Potion_L, u_Ingame from user_table where u_Id = '%s'", wname);
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 
@@ -144,6 +148,7 @@ bool CDatabase::login(CObject* p_object) {
 		retcode = SQLBindCol(m_hstmt, 8, SQL_C_SHORT, &y, 10, &l_y);
 		retcode = SQLBindCol(m_hstmt, 9, SQL_C_SHORT, &potion_s, 10, &l_potion_s);
 		retcode = SQLBindCol(m_hstmt, 10, SQL_C_SHORT, &potion_l, 10, &l_potion_l);
+		retcode = SQLBindCol(m_hstmt, 11, SQL_C_BIT, &ingame, 0, &l_ingame);
 
 		// Fetch and print each row of data. On an error, display a message and exit.  
 		retcode = SQLFetch(m_hstmt);
@@ -154,7 +159,12 @@ bool CDatabase::login(CObject* p_object) {
 
 		if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO)
 		{
-			wprintf(L"%20s %6d %6d %6d %6d %6d %6d %6d %6d %6d", nickname, visual, max_hp, hp, level, exp, x, y, potion_s, potion_l);
+			wprintf(L"%20s %6d %6d %6d %6d %6d %6d %6d %6d %6d %6d", nickname, visual, max_hp, hp, level, exp, x, y, potion_s, potion_l, ingame);
+
+			if (ingame) {
+				m_s_mtx.unlock();
+				return false;
+			}
 
 			PLAYER_INFO* info = new PLAYER_INFO;
 			WideCharToMultiByte(CP_ACP, 0, nickname, -1, info->nickname, NAME_SIZE, NULL, NULL);
@@ -162,6 +172,8 @@ bool CDatabase::login(CObject* p_object) {
 			while (info->nickname[strlen(info->nickname) - 1] == ' ') {
 				info->nickname[strlen(info->nickname) - 1] = info->nickname[strlen(info->nickname)];
 			}
+
+			strcpy_s(p_object->m_name, info->nickname);
 
 			info->visual = visual;
 			info->max_hp = max_hp;
@@ -195,7 +207,6 @@ bool CDatabase::login(CObject* p_object) {
 }
 
 bool CDatabase::logout(CObject* p_object) {
-
 	SQLRETURN retcode;
 	SQLWCHAR szId[NAME_SIZE];
 	SQLSMALLINT dPosx, dPosy;
@@ -209,7 +220,35 @@ bool CDatabase::logout(CObject* p_object) {
 	WCHAR wname[NAME_SIZE];
 
 	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
-	wsprintf(cmd, L"update user_table set u_X = %d, u_Y = %d where u_Nickname = '%s'", p_object->m_x, p_object->m_y, wname);
+	wsprintf(cmd, L"update user_table set u_X = %d, u_Y = %d, u_Ingame = 0 where u_Nickname = '%s'", p_object->m_x, p_object->m_y, wname);
+	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
+	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
+		//wprintf(L"Logout [%s] %d %d\n", wname, objects[c_id].x, objects[c_id].y);
+		m_s_mtx.unlock();
+		return true;
+	}
+	else {
+		disp_error(m_hstmt, SQL_HANDLE_STMT, retcode);
+		m_s_mtx.unlock();
+		return false;
+	}
+}
+
+bool CDatabase::set_ingame(CObject* p_object) {
+	SQLRETURN retcode;
+	SQLWCHAR szId[NAME_SIZE];
+	SQLSMALLINT dPosx, dPosy;
+	SQLLEN cbId = 0, cbPosx = 0, cbPosy = 0;
+
+	m_s_mtx.lock();
+
+	retcode = SQLAllocHandle(SQL_HANDLE_STMT, m_hdbc, &m_hstmt);
+
+	WCHAR cmd[200];
+	WCHAR wname[NAME_SIZE];
+
+	mbstowcs_s(nullptr, wname, NAME_SIZE, p_object->m_name, NAME_SIZE);
+	wsprintf(cmd, L"update user_table set u_Ingame = 1 where u_Nickname = '%s'", wname);
 	retcode = SQLExecDirect(m_hstmt, (SQLWCHAR*)cmd, SQL_NTS);
 	if (retcode == SQL_SUCCESS || retcode == SQL_SUCCESS_WITH_INFO) {
 		//wprintf(L"Logout [%s] %d %d\n", wname, objects[c_id].x, objects[c_id].y);

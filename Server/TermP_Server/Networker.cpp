@@ -75,8 +75,7 @@ void CNetworker::init() {
 	std::cout << "NPC Initialize Start" << std::endl;
 
 	for (int i = 0; i < MAX_NPC; ++i) {
-		m_objects[i].m_x = rand() % W_WIDTH;
-		m_objects[i].m_y = rand() % W_HEIGHT;
+		teleport(m_objects[i]);
 
 		int new_sector_x = m_objects[i].m_sector_x = m_objects[i].m_x / SECTOR_WIDTH;
 		int new_sector_y = m_objects[i].m_sector_y = m_objects[i].m_y / SECTOR_HEIGHT;
@@ -322,6 +321,19 @@ void CNetworker::work() {
 void CNetworker::clear() {
 	closesocket(m_s_socket);
 	WSACleanup();
+}
+
+void CNetworker::teleport(CObject& object) {
+	int new_x = rand() % WORLD_WIDTH;
+	int new_y = rand() % WORLD_HEIGHT;
+
+	while (false == m_map.can_move(new_x, new_y)) {
+		new_x = rand() % WORLD_WIDTH;
+		new_y = rand() % WORLD_HEIGHT;
+	}
+
+	object.m_x = new_x;
+	object.m_y = new_y;
 }
 
 void CNetworker::random_move(CObject& object) {
@@ -599,7 +611,102 @@ void CNetworker::prcs_packet(int client_id, char* packet) {
 				m_objects[player_id].send_remove_object_packet(m_objects[client_id]);
 			}
 		}
+
+		break;
 	}
+	case CS_TELEPORT:
+	{
+		teleport(m_objects[client_id]);
+
+		// Sector
+		int old_sector_x = m_objects[client_id].m_sector_x;
+		int old_sector_y = m_objects[client_id].m_sector_y;
+
+		int new_sector_x = m_objects[client_id].m_x / SECTOR_WIDTH;
+		int new_sector_y = m_objects[client_id].m_y / SECTOR_HEIGHT;
+
+		if (old_sector_x != new_sector_x || old_sector_y != new_sector_y) {
+			m_sectors.change_sector(client_id, old_sector_x, old_sector_y, new_sector_x, new_sector_y);
+		}
+
+		std::unordered_set<SECTOR*> sectors_arr;
+
+		m_sectors.calculate_around_sector(m_objects[client_id].m_x, m_objects[client_id].m_y, sectors_arr);
+
+		// view list
+		std::unordered_set<int> new_view_list;
+		m_objects[client_id].m_vl_lock.lock();
+		std::unordered_set<int> old_view_list = m_objects[client_id].m_view_list;
+		m_objects[client_id].m_vl_lock.unlock();
+
+		for (auto& sector : sectors_arr) {
+			std::lock_guard<std::mutex> lock((*sector).mtx);
+
+			if ((*sector).ids.size() == 0) continue;
+
+			for (auto& id : (*sector).ids) {
+				{
+					std::lock_guard<std::mutex> slock(m_objects[id].m_s_lock);
+
+					if (ST_INGAME != m_objects[id].m_state) {
+						continue;
+					}
+				}
+
+				if (m_objects[id].m_id == client_id) {
+					continue;
+				}
+
+				if (false == m_objects[client_id].can_see(m_objects[id])) {
+					continue;
+				}
+
+				new_view_list.insert(id);
+
+				//
+				if (true == m_objects[id].is_NPC()) {
+					if (m_objects[id].m_active == false) {
+						bool old_active = false;
+						bool new_active = true;
+
+						if (true == std::atomic_compare_exchange_strong(&m_objects[id].m_active, &old_active, new_active)) {
+							m_p_timer->add_event(m_objects[id].m_id, 1000, EV_RANDOM_MOVE, -1);
+						}
+					}
+					else {
+						OVERLAPPED_EX* over_ex = new OVERLAPPED_EX;
+						over_ex->m_option = OP_NPC_MOVE;
+						over_ex->m_target_id = client_id;
+						PostQueuedCompletionStatus(m_h_iocp, 1, m_objects[id].m_id, &over_ex->m_overlapped);
+					}
+				}
+			}
+		}
+
+		// send
+		m_objects[client_id].send_move_packet(m_objects[client_id]);
+
+		for (int player_id : new_view_list) {
+			if (0 == old_view_list.count(player_id)) {
+				m_objects[client_id].send_add_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_add_object_packet(m_objects[client_id]);
+			}
+			else {
+				m_objects[player_id].send_move_packet(m_objects[client_id]);
+			}
+		}
+
+		for (int player_id : old_view_list) {
+			if (0 == new_view_list.count(player_id)) {
+				m_objects[client_id].send_remove_object_packet(m_objects[player_id]);
+				m_objects[player_id].send_remove_object_packet(m_objects[client_id]);
+			}
+		}
+
+		break;
+	}
+	default:
+		break;
 	}
 
 }

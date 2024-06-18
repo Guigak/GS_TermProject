@@ -452,7 +452,7 @@ void client_main()
 	g_window->draw(status_rect);
 
 	// level
-	sprintf_s(buf, "Level : %d", g_level);
+	sprintf_s(buf, "LEVEL : %d", g_level);
 	text.setString(buf);
 	auto size = text.getGlobalBounds();
 	text.setPosition((float)WINDOW_WIDTH / 2 - size.width / 2, 0);
@@ -591,6 +591,13 @@ int main()
 					break;
 				case sf::Keyboard::Escape:
 					window.close();
+					break;
+				//
+				case sf::Keyboard::T:
+					CS_TELEPORT_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_TELEPORT;
+					send_packet(&p);
 					break;
 				}
 				if (-1 != direction) {

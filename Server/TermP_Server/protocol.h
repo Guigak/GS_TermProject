@@ -11,7 +11,7 @@ constexpr int W_HEIGHT = 2000;
 // add
 constexpr int BUF_SIZE = 200;
 
-constexpr int VIEW_RANGE = 8;
+constexpr int VIEW_RANGE = 15;
 
 constexpr int WORLD_WIDTH = 2000;
 constexpr int WORLD_HEIGHT = 2000;
